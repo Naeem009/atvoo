@@ -40,6 +40,25 @@ Public machine-readable endpoints (outside `/api` prefix, served at the storefro
 
 **Observability.** `X-Request-Id` in/out; `traceparent` propagated; audit logs for privileged actions.
 
+## Phase 2 public catalog endpoints
+
+The current API workspace implements these unauthenticated, versioned routes:
+
+- `GET /api/v1/products` and `GET /api/v1/products/search`
+- `GET /api/v1/products/:idOrSlug`
+- `GET /api/v1/categories` and `GET /api/v1/brands`
+
+Product lists accept `page` (default 1, maximum 10,000), `pageSize` (default
+20, maximum 100), `q` (2–100 characters), `category` and `brand` slugs,
+`minPrice` and `maxPrice` in minor units, `availability=all|in-stock`, and
+`sort=newest|price-asc|price-desc|relevance`. Search requires `q`; relevance
+sorting is only accepted with a query. Unknown parameters and invalid
+combinations return 422. Product lists use the standard `{ data, meta }`
+pagination envelope. Public products must be active, approved, owned by an
+approved vendor, assigned to active taxonomy records, and have an active
+variant and at least one image. Product image URLs use the configured public
+`SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` bucket.
+
 ---
 
 # AUTHENTICATION APIs

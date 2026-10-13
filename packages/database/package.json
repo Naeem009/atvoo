@@ -1,0 +1,15 @@
+{
+  "name": "@imtiaz-mart/database",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "generate": "prisma generate --schema prisma/schema.prisma",
+    "validate": "prisma validate --schema prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "6.12.0",
+    "prisma": "6.12.0"
+  }
+}
