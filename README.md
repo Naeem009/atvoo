@@ -22,7 +22,7 @@ Each phase has a written scope, a focused validation gate, and a documented resu
 | 6. Launch capabilities | Notifications, loyalty, affiliates, analytics/consent, visual search, discoverability feeds, MCP and social automation | Provider/contract/security tests and feature-flag verification |
 | 7. Launch readiness | Security, accessibility, performance, backups, runbooks, monitoring and go-live checklist | Handbook §12 and `09_LAUNCH_READINESS_AND_OPERATIONS.md` go-live gates |
 
-**Current phase:** Phase 2 — Catalog and discovery. Phase 1 passed build, lint, server-rendered HTML, image delivery, and responsive-style checks. Phase 2 starts by establishing the documented API/database catalog foundation; the current starter repository does not contain those workspaces yet. Later-phase functionality must not be presented as live until its data source, routes, and validation gates exist.
+**Current phase:** Phase 2 — Catalog and discovery. Phase 1 passed build, lint, server-rendered HTML, image delivery, and responsive-style checks. The Phase 2 Prisma catalog foundation and NestJS API workspace now provide public product listing, full-text search, product details, categories, and brands. Storefront integration, no-JS SEO surfaces, and the complete Phase 2 exit gate remain in progress. Later-phase functionality must not be presented as live until its data source, routes, and validation gates exist.
 
 ## Development
 
@@ -42,7 +42,7 @@ npm run build
 
 ### Supabase catalog foundation
 
-Copy `.env.example` to `.env.local`, then set `DATABASE_URL` to the Supabase
+Copy `.env.example` to `.env`, then set `DATABASE_URL` to the Supabase
 transaction pooler URL (port `6543`) and `DIRECT_URL` to the session pooler or
 direct URL (port `5432`). Keep the database password out of source control.
 Generate and validate the Prisma client/schema with:
@@ -52,11 +52,14 @@ npm run db:validate
 npm run db:generate
 ```
 
+The API also needs `SUPABASE_URL` and
+`SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` (default bucket name: `product-media`).
 After verifying that the configured project is the intended development
-project, apply database migrations with `npm run db:migrate:deploy`. The initial
-Prisma migration installs the UUIDv7 generator and creates the catalog tables
-with row-level security enabled. RLS is default-deny until the API layer adds
-explicitly scoped access.
+project, apply database migrations with `npm run db:migrate:deploy`. The Prisma
+migrations install the UUIDv7 generator, create catalog tables, enforce
+publication requirements, synchronize approval decisions, and add PostgreSQL
+full-text and trigram search indexes. RLS is default-deny until the API layer
+adds explicitly scoped access.
 
 Apply the matching Supabase migration after Prisma so both migration histories
 stay aligned:
@@ -65,12 +68,13 @@ stay aligned:
 supabase db push
 ```
 
-The storefront must access catalog data through the API; it must not query
-Supabase directly. The current starter does not yet contain that API workspace,
-so this step creates the database foundation, append-only product approval
-history, and documented category/Unbranded reference rows without presenting
-product data as available in the storefront.
-Vendor data, product approval, Storage buckets/policies, catalog API routes, and
-catalog search are not part of this initial schema.
+Run the API locally with `npm run dev:api` (port `3001` by default). Its
+versioned public endpoints are `GET /api/v1/products`,
+`GET /api/v1/products/search`, `GET /api/v1/products/:idOrSlug`,
+`GET /api/v1/categories`, and `GET /api/v1/brands`. The storefront must access
+catalog data through the API; it must not query Supabase directly. The API
+requires the public `product-media` Storage bucket for product image URLs; the
+bucket itself is provisioned separately.
+Run catalog query tests with `npm run test:api`.
 
 The complete production setup, environment variables, architecture, testing, security, and deployment procedures are documented in the [Developer Handbook](PROJECT%20DOCUMENTATIONS/00_DEVELOPER_HANDBOOK.md).

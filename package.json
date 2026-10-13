@@ -3,19 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
+    "apps/api",
     "packages/database"
   ],
   "scripts": {
     "dev": "next dev",
+    "dev:api": "npm run dev --workspace=@imtiaz-mart/api",
     "build": "next build",
+    "build:api": "npm run build --workspace=@imtiaz-mart/api",
     "start": "next start",
     "lint": "eslint",
-    "db:generate": "npm run generate --workspace=@imtiaz-mart/database",
-    "db:validate": "npm run validate --workspace=@imtiaz-mart/database",
-    "db:migrate:deploy": "npm run migrate:deploy --workspace=@imtiaz-mart/database",
-    "db:test": "npm run test --workspace=@imtiaz-mart/database"
+    "db:generate": "./packages/database/node_modules/.bin/prisma generate --schema packages/database/prisma/schema.prisma",
+    "db:validate": "./packages/database/node_modules/.bin/prisma validate --schema packages/database/prisma/schema.prisma",
+    "db:migrate:deploy": "./packages/database/node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma",
+    "db:test": "npm run test --workspace=@imtiaz-mart/database",
+    "test:api": "npm test --workspace=@imtiaz-mart/api"
   },
   "dependencies": {
+    "@prisma/client": "^6.12.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

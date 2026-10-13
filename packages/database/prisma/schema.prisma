@@ -115,7 +115,9 @@ model Product {
   title           String            @db.VarChar(150)
   slug            String            @unique @db.VarChar(180)
   description     String?
+  searchDocument Unsupported("tsvector")? @map("search_document")
   status          ProductStatus     @default(DRAFT)
+  approvalStatus  ProductApprovalDecision @default(PENDING_REVIEW) @map("approval_status")
   condition       ProductCondition  @default(NEW)
   countryOfOrigin String?           @map("country_of_origin") @db.Char(2)
   weightGrams     Int?              @map("weight_grams")

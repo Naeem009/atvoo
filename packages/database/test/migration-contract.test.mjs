@@ -23,6 +23,34 @@ const supabaseRlsMigration = readFileSync(
   ),
   "utf8",
 );
+const apiFoundationMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261013095900_catalog_api_foundation/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseApiFoundationMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261013095900_catalog_api_foundation.sql",
+  ),
+  "utf8",
+);
+const productSearchMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261013100000_product_search/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseProductSearchMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261013100000_product_search.sql",
+  ),
+  "utf8",
+);
 
 test("every catalog table created in the migration has RLS enabled", () => {
   const tables = [...migration.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
@@ -98,4 +126,16 @@ test("documented reference taxonomy and Unbranded are seeded idempotently", () =
   ]) {
     assert.ok(migration.includes(`'${slug}'`), `missing documented seed ${slug}`);
   }
+});
+
+test("catalog API and search changes stay aligned across both migration histories", () => {
+  assert.equal(apiFoundationMigration, supabaseApiFoundationMigration);
+  assert.equal(productSearchMigration, supabaseProductSearchMigration);
+  assert.match(apiFoundationMigration, /ADD COLUMN IF NOT EXISTS "approval_status"/);
+  assert.match(apiFoundationMigration, /product_approvals_sync_approval_status/);
+  assert.match(apiFoundationMigration, /ORDER BY created_at DESC, id DESC/);
+  assert.match(productSearchMigration, /CREATE EXTENSION IF NOT EXISTS pg_trgm/);
+  assert.match(productSearchMigration, /products_search_document_gin_idx/);
+  assert.match(productSearchMigration, /products_title_trgm_gin_idx/);
+  assert.match(schema, /searchDocument Unsupported\("tsvector"\)/);
 });

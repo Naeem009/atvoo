@@ -18,12 +18,13 @@ npm run db:migrate:deploy
 
 The initial migration creates those tables, applies default-deny RLS and
 catalog publication constraints, and inserts the documented category taxonomy
-and `Unbranded` reference brand. It does not provision Storage buckets,
-application roles, or product data.
+and `Unbranded` reference brand. Follow-up migrations synchronize approval
+decisions and add full-text/trigram search indexes. These migrations do not
+provision Storage buckets, application roles, or product data.
 Configure and verify the development database URLs before running
 `db:migrate:deploy`. Then run `supabase db push` to apply the matching Supabase
-RLS migration. Migrations have not been applied to the linked remote project
-by this repository setup.
+RLS, approval, and search migrations. Migrations have not been applied to the
+linked remote project by this repository setup.
 
 ## Prerequisites
 
