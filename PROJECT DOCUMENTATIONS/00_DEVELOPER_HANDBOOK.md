@@ -19,13 +19,16 @@ product listing/search/detail, categories, and brands. It powers
 server-rendered `/products` search/filter/pagination, `/categories` index and
 category listings, and `/products/[slug]` detail pages. Product pages include
 canonical metadata and Product/Offer JSON-LD; the app exposes `robots.txt`,
-`llms.txt`, and an API-backed `sitemap.xml`. The storefront acceptance test
-verifies no-JS HTML, crawler surfaces, API error/not-found states, responsive
-styles, keyboard focus and reduced motion, and selected WCAG AA text-contrast
-ratios. These checks are not a browser-driven accessibility certification.
-The `notFound()` path emits `noindex`; with Next.js partial prerendering, an
-HTTP 200 may be sent for a streamed not-found response. Cart, checkout, and
-order lifecycle remain unimplemented.
+`llms.txt`, and an API-backed `sitemap.xml`. The storefront acceptance test verifies no-JS HTML, cart session/mutation
+flows, crawler surfaces, API error/not-found states, responsive styles,
+keyboard focus and reduced motion, and selected WCAG AA text-contrast ratios.
+These checks are not a browser-driven accessibility certification. The
+`notFound()` path emits `noindex`; with Next.js partial prerendering, an HTTP
+200 may be sent for a streamed not-found response. The Phase 3 guest-cart
+foundation is implemented: carts persist for 30 days, cart operations check
+current product/stock eligibility, and the UI surfaces price/stock changes.
+Carts do not reserve inventory. Checkout is disabled; shipping/tax quoting,
+orders, payments, and order lifecycle are not implemented.
 
 The catalog schema, three Prisma migrations, matching Supabase SQL migrations,
 API build/tests, schema validation, migration-contract tests, lint, and
@@ -321,7 +324,7 @@ the target-architecture sections are requirements, not additional workspaces.
 
 ```text
 atvoo/
-├── app/                        Root Next.js App Router (currently homepage only)
+├── app/                        Root Next.js App Router (catalog and guest-cart storefront)
 ├── public/                     Static assets
 ├── apps/
 │   └── api/                    NestJS catalog REST API and tests
@@ -338,8 +341,11 @@ atvoo/
 
 ### 2.1 Workspace responsibilities
 
-**`app/`** is the root Next.js App Router application. The current route is
-`app/page.tsx`; catalog pages and API integration remain to be implemented.
+**`app/`** is the root Next.js App Router application. It serves the homepage,
+API-backed catalog and category pages, product detail and variant selection,
+and the server-rendered guest cart. Same-origin `/api/cart` routes proxy to the
+NestJS API and keep the guest session in an HttpOnly cookie. Checkout and
+orders remain unimplemented.
 
 **`apps/api`** is the current NestJS public catalog API. It implements public
 product list/search/detail, categories, and brands. Authentication, RBAC,
@@ -356,13 +362,13 @@ does not establish that a hosted project has received them.
 ### 2.2 Dependency direction
 
 ```text
-Next.js storefront ──(server-side catalog requests)──> NestJS API
+Next.js storefront ──(server-side catalog and cart requests)──> NestJS API
 NestJS API ──> Prisma catalog schema ──> PostgreSQL
 ```
 
 The intended boundary is binding: the browser-facing app accesses catalog data
-through the API, not directly through Supabase. The homepage and catalog
-storefront use this integration. The broader n8n, shared package, and commerce
+through the API, not directly through Supabase. Catalog and cart storefront
+requests use this integration. The broader n8n, shared package, and commerce
 boundaries below remain target architecture.
 
 ### 2.3 Important source locations
@@ -374,7 +380,9 @@ boundaries below remain target architecture.
 | API bootstrap and global configuration | `apps/api/src/main.ts` |
 | API module composition | `apps/api/src/modules/api.module.ts` |
 | API catalog controller/service | `apps/api/src/modules/catalog/` |
+| API guest-cart controller/service | `apps/api/src/modules/cart/` |
 | API tests | `apps/api/test/` |
+| Storefront cart proxy and contracts | `app/lib/cart*.ts`, `app/api/cart/` |
 | Prisma schema | `packages/database/prisma/schema.prisma` |
 | Prisma migrations | `packages/database/prisma/migrations/` |
 | Supabase SQL migrations | `supabase/migrations/` |
@@ -1111,17 +1119,18 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 
 | Capability | Status | Verified evidence / limit |
 | --- | --- | --- |
-| Next.js storefront | Phase 2 complete | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; portal and commerce routes remain unimplemented. |
-| NestJS catalog API and Swagger | Implemented slice | `apps/api/src/`; public product list/search/detail, categories, and brands only. |
-| Catalog schema and migrations | Implemented foundation | `packages/database/prisma/` and aligned `supabase/migrations/`; not the full domain model in `02`. |
+| Next.js storefront | Phase 2 complete; Phase 3 guest-cart slice | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, guest cart, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; checkout/orders and portals remain unimplemented. |
+| NestJS catalog and cart API | Implemented slices | `apps/api/src/`; public product list/search/detail, categories, brands, and guest-cart read/add/update/remove endpoints. |
+| Catalog/cart schema and migrations | Implemented foundation | `packages/database/prisma/` and matching `supabase/migrations/`; not the full domain model in `02`. Hosted Supabase application of the cart migration is unverified. |
 | Public catalog visibility/search | Implemented slice | Catalog service enforces publication criteria; PostgreSQL full-text/trigram search migrations are present. |
 | Catalog RLS | Implemented for initial catalog tables | Default-deny policies are in the catalog migration set; no claim is made for future or absent tables. |
 | API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
 | Storefront catalog integration and discovery | Implemented; Phase 2 gate passed | `app/` server-renders API-backed catalog pages; `npm run test:storefront` verifies no-JS HTML, filters, metadata/JSON-LD, crawler surfaces, not-found behavior, and selected accessibility checks. This is not automated browser accessibility certification. |
+| Guest cart | Implemented foundation; Phase 3 in progress | Persistent guest cart, 30-day session, stock/publication checks, price/stock warnings, same-origin HttpOnly-cookie proxy, variant selection and cart UI. Cart operations do not reserve stock; hosted database integration is unverified. |
 | Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
 | Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
 | Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
-| Cart, checkout, orders, payments, escrow, payouts | Not implemented | No current schema/API implementation. |
+| Checkout, orders, payments, escrow, payouts | Not implemented | Cart is implemented as a separate foundation; no order schema/API, checkout quote, payment integration, or stock reservation exists. |
 | Vendor/admin portals, CMS, reviews, loyalty, affiliates, returns | Not implemented | Target requirements only. |
 | Redis, outbox, n8n, social automation, visual search/pgvector | Not implemented | Target requirements only. |
 | CI/CD and production deployment | Not configured / unverified | No checked-in GitHub Actions workflows or API Dockerfile/deployment file. |
@@ -1392,7 +1401,7 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 | `npm run start` | Start the built Next.js app. |
 | `npm run lint` | Run ESLint from the root. |
 | `npm run test:api` / `npm run db:test` | Run API tests / database migration-contract tests. |
-| `npm run test:storefront` | Run production storefront smoke checks for Phase 2 discovery and accessibility requirements. |
+| `npm run test:storefront` | Run production storefront smoke checks for catalog discovery, guest-cart session/mutations, crawler surfaces, and selected accessibility requirements. |
 | `npm run db:validate` | Validate the Prisma schema. |
 | `npm run db:generate` | Generate Prisma Client. |
 | `npm run db:migrate:deploy` | Deploy existing Prisma migrations; verify the destination before use. |

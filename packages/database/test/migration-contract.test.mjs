@@ -44,6 +44,20 @@ const productSearchMigration = readFileSync(
   ),
   "utf8",
 );
+const cartMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261013101000_guest_cart_foundation/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseCartMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261013101000_guest_cart_foundation.sql",
+  ),
+  "utf8",
+);
 const supabaseProductSearchMigration = readFileSync(
   resolve(
     packageRoot,
@@ -138,4 +152,27 @@ test("catalog API and search changes stay aligned across both migration historie
   assert.match(productSearchMigration, /products_search_document_gin_idx/);
   assert.match(productSearchMigration, /products_title_trgm_gin_idx/);
   assert.match(schema, /searchDocument Unsupported\("tsvector"\)/);
+});
+
+test("guest cart migration stays aligned with Supabase and enforces its limits", () => {
+  assert.equal(cartMigration, supabaseCartMigration);
+  assert.deepEqual(
+    [...cartMigration.matchAll(/CREATE TABLE "([^"]+)"/g)].map(([, table]) => table),
+    ["carts", "cart_items"],
+  );
+  for (const table of ["carts", "cart_items"]) {
+    assert.match(
+      cartMigration,
+      new RegExp(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`),
+    );
+  }
+  assert.match(cartMigration, /DEFAULT public\.uuid_generate_v7\(\)/g);
+  assert.match(cartMigration, /CHECK \("quantity" BETWEEN 1 AND 10\)/);
+  assert.match(cartMigration, /CHECK \("unit_price" > 0\)/);
+  assert.match(cartMigration, /UNIQUE INDEX "carts_session_id_key"/);
+  assert.match(cartMigration, /ON DELETE CASCADE/);
+  assert.match(cartMigration, /ON DELETE RESTRICT/);
+  assert.doesNotMatch(cartMigration, /CREATE POLICY/i);
+  assert.match(schema, /model Cart \{/);
+  assert.match(schema, /model CartItem \{/);
 });

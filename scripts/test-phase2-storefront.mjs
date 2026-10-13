@@ -17,9 +17,16 @@ const product = {
   availability: "IN_STOCK",
   variants: [
     {
-      id: "variant-1",
+      id: "123e4567-e89b-42d3-a456-426614174001",
       price: { amount: "149900", currency: "PKR" },
       stock: 5,
+      options: { Color: "Black" },
+    },
+    {
+      id: "123e4567-e89b-42d3-a456-426614174003",
+      price: { amount: "159900", currency: "PKR" },
+      stock: 2,
+      options: { Color: "Silver" },
     },
   ],
   images: [],
@@ -46,6 +53,15 @@ const brands = [
   { id: "brand-1", name: "Example Brand", slug: "example-brand" },
 ];
 const productQueries = [];
+const cartSessionId = "123e4567-e89b-42d3-a456-426614174000";
+const cartItemId = "123e4567-e89b-42d3-a456-426614174002";
+const cartApiCalls = [];
+let mockCart = {
+  items: [],
+  itemCount: 0,
+  totals: [],
+  expiresAt: "2026-11-12T12:00:00.000Z",
+};
 let nextProcess;
 let serverError = "";
 let serverOutput = "";
@@ -64,13 +80,105 @@ async function unusedPort() {
   return address.port;
 }
 
-function respond(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
+function respond(response, status, body, headers = {}) {
+  response.writeHead(status, {
+    "content-type": "application/json",
+    ...headers,
+  });
   response.end(JSON.stringify(body));
 }
 
-const api = createServer((request, response) => {
+const api = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
+  if (url.pathname === "/api/v1/cart" || url.pathname.startsWith("/api/v1/cart/items")) {
+    const session = request.headers["x-cart-session"] ?? cartSessionId;
+    let body;
+    if (request.method !== "GET" && request.method !== "DELETE") {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    }
+    cartApiCalls.push({
+      method: request.method,
+      path: url.pathname,
+      session,
+      body,
+    });
+    if (request.method === "POST" && url.pathname === "/api/v1/cart/items") {
+      const quantity = body.quantity;
+      const variantId = body.variantId;
+      mockCart = {
+        items: [
+          {
+            id: cartItemId,
+            variantId,
+            title: product.title,
+            slug: product.slug,
+            vendor: product.vendor.name,
+            category: product.category.name,
+            quantity,
+            stock: 5,
+            available: true,
+            warnings: [],
+            price: product.price,
+            previousPrice: null,
+            lineTotal: {
+              amount: String(Number(product.price.amount) * quantity),
+              currency: product.price.currency,
+            },
+          },
+        ],
+        itemCount: quantity,
+        totals: [
+          {
+            currency: product.price.currency,
+            amount: String(Number(product.price.amount) * quantity),
+          },
+        ],
+        expiresAt: mockCart.expiresAt,
+      };
+    } else if (
+      request.method === "PATCH" &&
+      url.pathname === `/api/v1/cart/items/${cartItemId}`
+    ) {
+      const quantity = body.quantity;
+      mockCart = {
+        ...mockCart,
+        items: mockCart.items.map((item) => ({
+          ...item,
+          quantity,
+          lineTotal: {
+            amount: String(Number(item.price.amount) * quantity),
+            currency: item.price.currency,
+          },
+        })),
+        itemCount: quantity,
+        totals: [
+          {
+            currency: product.price.currency,
+            amount: String(Number(product.price.amount) * quantity),
+          },
+        ],
+      };
+    } else if (
+      request.method === "DELETE" &&
+      url.pathname === `/api/v1/cart/items/${cartItemId}`
+    ) {
+      mockCart = {
+        items: [],
+        itemCount: 0,
+        totals: [],
+        expiresAt: mockCart.expiresAt,
+      };
+    }
+    respond(
+      response,
+      200,
+      { data: mockCart },
+      { "x-cart-session": session },
+    );
+    return;
+  }
   if (url.pathname === "/api/v1/products") {
     productQueries.push(url.searchParams);
     if (url.searchParams.get("q") === "offline") {
@@ -290,6 +398,74 @@ async function main() {
     assert.equal(productJsonLd[0].offers.price, "1499.00");
     assert.equal(productJsonLd[0].offers.priceCurrency, "PKR");
     assert.equal(productJsonLd[1]["@type"], "BreadcrumbList");
+    assert.match(detail.html, /Add to cart/);
+    assert.match(detail.html, /Color: Black/);
+
+    const added = await fetch(`${baseUrl}/api/cart`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        variantId: product.variants[0].id,
+        quantity: 1,
+      }),
+    });
+    assert.equal(added.status, 200);
+    const setCookie = added.headers.get("set-cookie") ?? "";
+    assert.match(setCookie, new RegExp(`cart_session=${cartSessionId}`));
+    assert.match(setCookie, /HttpOnly/i);
+    assert.match(setCookie, /SameSite=Lax/i);
+    assert.match(setCookie, /Max-Age=2592000/i);
+    const cartCookie = `cart_session=${cartSessionId}`;
+    assert.equal(
+      cartApiCalls.at(-1)?.body.variantId,
+      product.variants[0].id,
+      "the same-origin cart endpoint forwards the selected variant",
+    );
+    assert.equal(cartApiCalls.at(-1)?.session, cartSessionId);
+
+    const cartPageResponse = await fetch(`${baseUrl}/cart`, {
+      headers: {
+        cookie: cartCookie,
+        "user-agent": "Googlebot",
+      },
+    });
+    const cartPageHtml = await cartPageResponse.text();
+    assert.equal(cartPageResponse.status, 200);
+    assertAccessibleShell(cartPageHtml, "cart page");
+    assert.match(cartPageHtml, /Test Camera/);
+    assert.match(cartPageHtml, /Checkout unavailable/);
+    assert.ok(
+      cartApiCalls.some(
+        (call) => call.method === "GET" && call.session === cartSessionId,
+      ),
+      "the cart page loads the session identified by its HttpOnly cookie",
+    );
+
+    const updatedCart = await fetch(
+      `${baseUrl}/api/cart/items/${cartItemId}`,
+      {
+        method: "PATCH",
+        headers: {
+          cookie: cartCookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ quantity: 2 }),
+      },
+    );
+    assert.equal(updatedCart.status, 200);
+    assert.equal(
+      cartApiCalls.at(-1)?.session,
+      cartSessionId,
+      "quantity updates remain scoped to the browser cart session",
+    );
+    assert.equal((await updatedCart.json()).data.itemCount, 2);
+
+    const removedCart = await fetch(
+      `${baseUrl}/api/cart/items/${cartItemId}`,
+      { method: "DELETE", headers: { cookie: cartCookie } },
+    );
+    assert.equal(removedCart.status, 200);
+    assert.equal((await removedCart.json()).data.itemCount, 0);
 
     const missingProduct = await getHtml(`${baseUrl}/products/missing-item`);
     assert.ok([200, 404].includes(missingProduct.response.status));
@@ -329,7 +505,7 @@ async function main() {
 
     await checkStaticAccessibility();
     console.log(
-      "Phase 2 storefront checks passed: server-rendered catalog, query filters, pagination, category routes, metadata/JSON-LD, streamed not-found handling, robots, llms.txt, sitemap, API retry state, keyboard/reduced-motion/responsive CSS, and color contrast.",
+      "Storefront checks passed: catalog discovery, guest cart session and mutations, no-JS page rendering, SEO/crawler routes, error states, keyboard/reduced-motion/responsive CSS, and color contrast.",
     );
   } finally {
     if (nextProcess && nextProcess.exitCode === null) {

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -178,12 +179,42 @@ model ProductVariant {
   product        Product              @relation(fields: [productId, vendorId], references: [id, vendorId], onDelete: Restrict)
   vendor         Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   images         ProductImage[]       @relation("VariantImages")
+  cartItems      CartItem[]
 
   @@unique([vendorId, sku])
   @@unique([productId, id])
   @@index([productId, status])
   @@index([vendorId, status])
   @@map("product_variants")
+}
+
+model Cart {
+  id        String     @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  sessionId String     @unique @map("session_id") @db.Uuid
+  expiresAt DateTime   @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items     CartItem[]
+
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id               String        @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  cartId           String        @map("cart_id") @db.Uuid
+  productVariantId String        @map("product_variant_id") @db.Uuid
+  quantity         Int
+  unitPrice        BigInt        @map("unit_price")
+  currency         String        @db.Char(3)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  cart             Cart          @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productVariantId])
+  @@index([cartId, createdAt])
+  @@map("cart_items")
 }
 
 model ProductImage {

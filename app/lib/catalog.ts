@@ -16,7 +16,12 @@ export type CatalogProduct = {
   vendor: { name: string };
   price: CatalogMoney | null;
   availability: "IN_STOCK" | "OUT_OF_STOCK";
-  variants: Array<{ id: string; price: CatalogMoney; stock: number }>;
+  variants: Array<{
+    id: string;
+    price: CatalogMoney;
+    stock: number;
+    options: Record<string, string | number | boolean> | null;
+  }>;
   images: Array<{ url: string; alt: string | null }>;
 };
 
@@ -55,7 +60,7 @@ export class CatalogNotFoundError extends CatalogApiError {
   }
 }
 
-function apiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   const configuredUrl =
     process.env.API_BASE_URL ?? "http://localhost:3001/api/v1";
   let url: URL;
@@ -157,6 +162,7 @@ function parseProduct(value: unknown): CatalogProduct {
       id: requiredString(variant.id, "variant id"),
       price: parseMoney(variant.price),
       stock: variant.stock,
+      options: parseVariantOptions(variant.options),
     };
   });
 
@@ -199,10 +205,37 @@ function parseProduct(value: unknown): CatalogProduct {
   };
 }
 
+function parseVariantOptions(
+  value: unknown,
+): Record<string, string | number | boolean> | null {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) {
+    throw new CatalogApiError(
+      "Catalog response has invalid product options.",
+      502,
+    );
+  }
+  const options: Record<string, string | number | boolean> = {};
+  for (const [name, option] of Object.entries(value)) {
+    if (
+      typeof option !== "string" &&
+      typeof option !== "number" &&
+      typeof option !== "boolean"
+    ) {
+      throw new CatalogApiError(
+        "Catalog response has invalid product options.",
+        502,
+      );
+    }
+    options[name] = option;
+  }
+  return options;
+}
+
 async function requestJson(path: string): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(new URL(path, apiBaseUrl()), {
+    response = await fetch(new URL(path, getApiBaseUrl()), {
       headers: { accept: "application/json" },
     });
   } catch (error) {

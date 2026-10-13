@@ -10,6 +10,7 @@ import {
   type CatalogProduct,
 } from "@/app/lib/catalog";
 import { absoluteSiteUrl } from "@/app/lib/site";
+import { AddToCartButton } from "@/app/products/add-to-cart-button";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -160,9 +161,9 @@ function ProductDetails({ product }: { product: CatalogProduct }) {
               Product details will be added by the seller.
             </p>
           )}
+          <AddToCartButton variants={product.variants} />
           <p className="product-detail-note">
-            Checkout is not available yet. This product is shown for catalog
-            discovery only.
+            Checkout is not available yet. Your cart is saved for later.
           </p>
           <Link className="catalog-submit" href="/products">
             Continue exploring

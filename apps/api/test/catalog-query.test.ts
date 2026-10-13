@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HttpException } from "@nestjs/common";
 import { parseCatalogQuery } from "../src/modules/catalog/catalog-query";
+import {
+  parseAddCartItem,
+  parseCartItemId,
+  parseCartItemQuantity,
+  parseCartSession,
+} from "../src/modules/cart/cart-query";
 
 test("catalog queries apply safe pagination defaults", () => {
   assert.deepEqual(parseCatalogQuery({}), {
@@ -51,5 +57,32 @@ test("catalog queries reject unknown parameters and unbounded pages", () => {
     { sort: "relevance" },
   ]) {
     assert.throws(() => parseCatalogQuery(input), HttpException);
+  }
+});
+
+test("guest-cart input accepts UUID sessions and bounded variant quantities", () => {
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  assert.equal(parseCartSession(undefined), undefined);
+  assert.equal(parseCartSession(sessionId), sessionId);
+  assert.deepEqual(parseAddCartItem({ variantId: sessionId, quantity: 3 }), {
+    variantId: sessionId,
+    quantity: 3,
+  });
+  assert.equal(parseCartItemId(sessionId), sessionId);
+  assert.equal(parseCartItemQuantity({ quantity: 10 }), 10);
+});
+
+test("guest-cart input rejects invalid sessions, IDs, quantities, and extra fields", () => {
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  for (const operation of [
+    () => parseCartSession("not-a-uuid"),
+    () => parseCartItemId("not-a-uuid"),
+    () => parseAddCartItem({ variantId: sessionId, quantity: 0 }),
+    () => parseAddCartItem({ variantId: sessionId, quantity: 11 }),
+    () => parseAddCartItem({ variantId: sessionId, quantity: 1, price: 1 }),
+    () => parseCartItemQuantity({ quantity: 1.5 }),
+    () => parseCartItemQuantity({ quantity: 1, cartId: sessionId }),
+  ]) {
+    assert.throws(operation, HttpException);
   }
 });
