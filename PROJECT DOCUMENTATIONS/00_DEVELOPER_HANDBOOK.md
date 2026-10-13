@@ -11,17 +11,21 @@ This is the primary onboarding and operating guide for the ATVOO repository. It 
 
 ### Current repository baseline (verified 2026-10-13)
 
-The repository is in **Phase 2 — Catalog and discovery**; the Phase 2 exit
-gate remains open. The current source is
-a root-level Next.js storefront (`app/`) plus a small NestJS API workspace
-(`apps/api/`) and a Prisma catalog workspace (`packages/database/`). The API
-implements public product listing/search/detail, categories, and brands. It
-now powers server-rendered `/products` search/filter/pagination and
-`/products/[slug]` detail pages. Product details include dynamic metadata and
-Product/Offer JSON-LD; the app exposes `robots.txt` and an API-backed
-`sitemap.xml`. The listings and filters work without client-side JavaScript.
-Remaining Phase 2 work includes broader accessibility/responsive review and
-the rest of the documented discovery experience; checkout is not implemented.
+The repository is in **Phase 3 — Cart and order lifecycle**; the Phase 2
+catalog-and-discovery exit gate passed. The current source is a root-level
+Next.js storefront (`app/`) plus a small NestJS API workspace (`apps/api/`) and
+a Prisma catalog workspace (`packages/database/`). The API implements public
+product listing/search/detail, categories, and brands. It powers
+server-rendered `/products` search/filter/pagination, `/categories` index and
+category listings, and `/products/[slug]` detail pages. Product pages include
+canonical metadata and Product/Offer JSON-LD; the app exposes `robots.txt`,
+`llms.txt`, and an API-backed `sitemap.xml`. The storefront acceptance test
+verifies no-JS HTML, crawler surfaces, API error/not-found states, responsive
+styles, keyboard focus and reduced motion, and selected WCAG AA text-contrast
+ratios. These checks are not a browser-driven accessibility certification.
+The `notFound()` path emits `noindex`; with Next.js partial prerendering, an
+HTTP 200 may be sent for a streamed not-found response. Cart, checkout, and
+order lifecycle remain unimplemented.
 
 The catalog schema, three Prisma migrations, matching Supabase SQL migrations,
 API build/tests, schema validation, migration-contract tests, lint, and
@@ -31,7 +35,7 @@ that migrations were applied to a hosted Supabase project, that Storage buckets
 exist, or that production deployment/credentials are configured. Do not claim
 those integrations as live without fresh evidence.
 
-The only currently supported root commands are the scripts in the root
+The currently supported root commands are the scripts in the root
 `package.json`; the exact list is in §16.1. Commands and paths named elsewhere
 in this handbook are target requirements unless they also exist in the current
 source and package scripts.
@@ -352,13 +356,13 @@ does not establish that a hosted project has received them.
 ### 2.2 Dependency direction
 
 ```text
-Next.js app ──(catalog API integration: not implemented)──> NestJS API
+Next.js storefront ──(server-side catalog requests)──> NestJS API
 NestJS API ──> Prisma catalog schema ──> PostgreSQL
 ```
 
-The intended boundary is binding: the browser-facing app must access catalog
-data through the API, not directly through Supabase. The current homepage does
-not yet consume that API. The broader n8n, shared package, and commerce
+The intended boundary is binding: the browser-facing app accesses catalog data
+through the API, not directly through Supabase. The homepage and catalog
+storefront use this integration. The broader n8n, shared package, and commerce
 boundaries below remain target architecture.
 
 ### 2.3 Important source locations
@@ -563,10 +567,12 @@ specified in `04_API_ARCHITECTURE.md`.
 
 ### 5.4 Current web routes
 
-The Next.js application is at the repository root. `app/page.tsx` is the
-current homepage; `app/layout.tsx` and `app/globals.css` provide the root
-layout and styles. The catalog, portal, and legal routes in
-`01_PROJECT_MASTER_SPECIFICATION.md` are target routes and are not present.
+The Next.js application is at the repository root. Implemented storefront
+routes include `/`, `/products`, `/products/[slug]`, `/categories`,
+`/categories/[slug]`, `/robots.txt`, `/sitemap.xml`, and `/llms.txt`.
+`app/layout.tsx` and `app/globals.css` provide the root layout and styles;
+`app/not-found.tsx` provides the not-found UI. Account, cart, checkout, portal,
+and legal routes in `01_PROJECT_MASTER_SPECIFICATION.md` remain target work.
 
 ---
 
@@ -919,12 +925,18 @@ Failure cases: duplicate email, invalid credentials, inactive/deleted user, expi
 
 ### 9.2 Product discovery and search
 
-When the storefront is integrated, catalog data must load through the NestJS
-API. Current public API results exclude unpublished/inactive records and
-apply availability/visibility rules. Search uses PostgreSQL full-text and
-trigram indexes. Search/filter parameters must be bounded to prevent expensive
-unindexed queries. Product pages, structured metadata, and catalog UI remain
-target work.
+Catalog data loads through the NestJS API; current public API results exclude
+unpublished/inactive records and apply availability/visibility rules. Search
+uses PostgreSQL full-text and trigram indexes. Search/filter parameters are
+bounded to prevent expensive unindexed queries. The server-rendered storefront
+supports product search, category/brand/price/availability filters, sorting,
+and pagination; `/categories` and category detail pages expose catalog
+discovery. Product pages include canonical metadata and `schema.org`
+`Product`/`Offer` JSON-LD; listing pages include `CollectionPage`/`ItemList`
+and breadcrumb data. The `robots.txt`, sitemap, and `/llms.txt` discovery
+surfaces are implemented. The listings are rendered without client-side
+JavaScript. Streamed `notFound()` responses may use HTTP 200 with `noindex`
+under Next.js partial prerendering.
 
 Product pages expose canonical metadata, images, price, variants, availability, vendor info, and `schema.org` `Product`/`Offer` structured data (§9.6). Product mutations belong to authorized vendor/admin services.
 
@@ -1099,13 +1111,13 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 
 | Capability | Status | Verified evidence / limit |
 | --- | --- | --- |
-| Next.js application | Partial | Root `app/` contains the homepage, layout, styles, and favicon; no catalog pages or portals. |
+| Next.js storefront | Phase 2 complete | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; portal and commerce routes remain unimplemented. |
 | NestJS catalog API and Swagger | Implemented slice | `apps/api/src/`; public product list/search/detail, categories, and brands only. |
 | Catalog schema and migrations | Implemented foundation | `packages/database/prisma/` and aligned `supabase/migrations/`; not the full domain model in `02`. |
 | Public catalog visibility/search | Implemented slice | Catalog service enforces publication criteria; PostgreSQL full-text/trigram search migrations are present. |
 | Catalog RLS | Implemented for initial catalog tables | Default-deny policies are in the catalog migration set; no claim is made for future or absent tables. |
 | API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
-| Storefront catalog integration and no-JS SEO | Not implemented | No product/search routes, JSON-LD, sitemap, or robots surface currently exists. |
+| Storefront catalog integration and discovery | Implemented; Phase 2 gate passed | `app/` server-renders API-backed catalog pages; `npm run test:storefront` verifies no-JS HTML, filters, metadata/JSON-LD, crawler surfaces, not-found behavior, and selected accessibility checks. This is not automated browser accessibility certification. |
 | Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
 | Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
 | Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
@@ -1183,6 +1195,7 @@ npm run build
 npm run build:api
 npm run lint
 npm run test:api
+npm run test:storefront
 npm run db:test
 ```
 
@@ -1379,6 +1392,7 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 | `npm run start` | Start the built Next.js app. |
 | `npm run lint` | Run ESLint from the root. |
 | `npm run test:api` / `npm run db:test` | Run API tests / database migration-contract tests. |
+| `npm run test:storefront` | Run production storefront smoke checks for Phase 2 discovery and accessibility requirements. |
 | `npm run db:validate` | Validate the Prisma schema. |
 | `npm run db:generate` | Generate Prisma Client. |
 | `npm run db:migrate:deploy` | Deploy existing Prisma migrations; verify the destination before use. |

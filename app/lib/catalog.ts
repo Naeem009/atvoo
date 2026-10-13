@@ -265,7 +265,7 @@ export const getProduct = cache(async (slug: string): Promise<CatalogProduct> =>
   return parseProduct(payload.data);
 });
 
-export async function getCategories(): Promise<CatalogCategory[]> {
+export const getCategories = cache(async (): Promise<CatalogCategory[]> => {
   const payload = await requestJson("categories");
   if (!isRecord(payload) || !Array.isArray(payload.data)) {
     throw new CatalogApiError("Catalog response has invalid categories.", 502);
@@ -281,9 +281,9 @@ export async function getCategories(): Promise<CatalogCategory[]> {
       description: optionalString(category.description, "category description"),
     };
   });
-}
+});
 
-export async function getBrands(): Promise<CatalogBrand[]> {
+export const getBrands = cache(async (): Promise<CatalogBrand[]> => {
   const payload = await requestJson("brands");
   if (!isRecord(payload) || !Array.isArray(payload.data)) {
     throw new CatalogApiError("Catalog response has invalid brands.", 502);
@@ -298,7 +298,7 @@ export async function getBrands(): Promise<CatalogBrand[]> {
       slug: requiredString(brand.slug, "brand slug"),
     };
   });
-}
+});
 
 export function formatCatalogPrice(price: CatalogMoney): string {
   const amount = Number(price.amount) / 100;

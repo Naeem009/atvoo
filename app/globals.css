@@ -594,11 +594,48 @@ button:focus-visible {
 }
 
 .catalog-card-category,
-.catalog-card-vendor {
+.catalog-card-vendor,
+.catalog-card-availability {
   margin: 0;
   color: var(--color-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.category-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-list a {
+  display: grid;
+  min-height: 100px;
+  gap: 8px;
+  align-content: center;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.category-list a span:first-child {
+  color: var(--color-primary);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.category-list a span:last-child {
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.category-list a:hover {
+  border-color: var(--color-accent);
 }
 
 .catalog-card h2 {
@@ -877,6 +914,10 @@ button:focus-visible {
   }
 
   .product-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .category-list {
     grid-template-columns: 1fr;
   }
 

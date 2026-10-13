@@ -35,9 +35,6 @@ const categories = [
 export default function Home() {
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
       <div className="announcement-bar">
         <p>Good finds. More ways to discover.</p>
       </div>
@@ -46,7 +43,7 @@ export default function Home() {
           ATVOO<span>.</span>
         </a>
         <nav className="desktop-nav" aria-label="Main navigation">
-          <a href="#categories">Explore categories</a>
+          <Link href="/categories">Explore categories</Link>
           <a href="#our-point-of-view">Our point of view</a>
         </nav>
         <Link className="header-action" href="/products">
@@ -92,6 +89,9 @@ export default function Home() {
               things you choose.
             </p>
           </div>
+          <Link className="text-link category-all-link" href="/categories">
+            See all categories <span aria-hidden="true">↗</span>
+          </Link>
           <div className="category-grid">
             {categories.map((category) => (
               <article className="category-tile" key={category.name}>

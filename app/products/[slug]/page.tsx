@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   CatalogApiError,
@@ -10,10 +9,13 @@ import {
   getProduct,
   type CatalogProduct,
 } from "@/app/lib/catalog";
+import { absoluteSiteUrl } from "@/app/lib/site";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+export const instant = false;
 
 export async function generateMetadata({
   params,
@@ -31,6 +33,12 @@ export async function generateMetadata({
         description: product.description ?? undefined,
         images: product.images[0] ? [product.images[0].url] : undefined,
         type: "website",
+        url: absoluteSiteUrl(`/products/${encodeURIComponent(product.slug)}`),
+      },
+      alternates: {
+        canonical: absoluteSiteUrl(
+          `/products/${encodeURIComponent(product.slug)}`,
+        ),
       },
     };
   } catch (error) {
@@ -41,46 +49,14 @@ export async function generateMetadata({
   }
 }
 
-async function ProductDetails({ params }: ProductPageProps) {
-  const { slug } = await params;
-  let product: CatalogProduct | undefined;
-  let errorMessage: string | undefined;
-  try {
-    product = await getProduct(slug);
-  } catch (error) {
-    if (error instanceof CatalogNotFoundError) notFound();
-    if (error instanceof CatalogApiError) {
-      errorMessage = error.message;
-    } else {
-      throw error;
-    }
-  }
-
-  if (errorMessage) {
-    return (
-      <main className="catalog-page">
-        <div className="catalog-state" role="alert">
-          <h1>Product details are unavailable</h1>
-          <p>{errorMessage}</p>
-          <Link
-            className="catalog-submit"
-            href={`/products/${encodeURIComponent(slug)}`}
-          >
-            Try again
-          </Link>
-        </div>
-      </main>
-    );
-  }
-  if (!product) {
-    throw new Error("Product lookup completed without a result or an error.");
-  }
-
+function ProductDetails({ product }: { product: CatalogProduct }) {
   const image = product.images[0];
+  const productPath = `/products/${encodeURIComponent(product.slug)}`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.title,
+    url: absoluteSiteUrl(productPath),
     description: product.description ?? undefined,
     image: product.images.map((item) => item.url),
     sku: product.variants[0]?.id,
@@ -105,9 +81,23 @@ async function ProductDetails({ params }: ProductPageProps) {
         }
       : undefined,
   };
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { name: "Home", path: "/" },
+      { name: "Products", path: "/products" },
+      { name: product.title, path: productPath },
+    ].map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: absoluteSiteUrl(item.path),
+    })),
+  };
 
   return (
-    <main className="catalog-page product-page">
+    <main id="main-content" className="catalog-page product-page">
       <nav className="catalog-breadcrumbs" aria-label="Breadcrumb">
         <Link href="/">Home</Link>
         <span aria-hidden="true">/</span>
@@ -118,7 +108,10 @@ async function ProductDetails({ params }: ProductPageProps) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+          __html: JSON.stringify([jsonLd, breadcrumbs]).replace(
+            /</g,
+            "\\u003c",
+          ),
         }}
       />
       <article className="product-detail">
@@ -139,7 +132,9 @@ async function ProductDetails({ params }: ProductPageProps) {
         </div>
         <div className="product-detail-copy">
           <p className="eyebrow">
-            {product.category.name}
+            <Link href={`/categories/${encodeURIComponent(product.category.slug)}`}>
+              {product.category.name}
+            </Link>
             {product.brand ? ` · ${product.brand.name}` : ""}
           </p>
           <h1>{product.title}</h1>
@@ -178,25 +173,30 @@ async function ProductDetails({ params }: ProductPageProps) {
   );
 }
 
-function ProductSkeleton() {
-  return (
-    <main className="catalog-page" aria-busy="true" aria-label="Loading product">
-      <div className="product-detail">
-        <span className="catalog-skeleton catalog-skeleton-detail-image" />
-        <div>
-          <span className="catalog-skeleton catalog-skeleton-line" />
-          <span className="catalog-skeleton catalog-skeleton-heading" />
-          <span className="catalog-skeleton catalog-skeleton-line short" />
-        </div>
-      </div>
-    </main>
-  );
-}
-
-export default function ProductPage({ params }: ProductPageProps) {
-  return (
-    <Suspense fallback={<ProductSkeleton />}>
-      <ProductDetails params={params} />
-    </Suspense>
-  );
+export default async function ProductPage({ params }: ProductPageProps) {
+  const resolvedParams = await params;
+  let product: CatalogProduct;
+  try {
+    product = await getProduct(resolvedParams.slug);
+  } catch (error) {
+    if (error instanceof CatalogNotFoundError) notFound();
+    if (error instanceof CatalogApiError) {
+      return (
+        <main id="main-content" className="catalog-page">
+          <div className="catalog-state" role="alert">
+            <h1>Product details are unavailable</h1>
+            <p>{error.message}</p>
+            <Link
+              className="catalog-submit"
+              href={`/products/${encodeURIComponent(resolvedParams.slug)}`}
+            >
+              Try again
+            </Link>
+          </div>
+        </main>
+      );
+    }
+    throw error;
+  }
+  return <ProductDetails product={product} />;
 }

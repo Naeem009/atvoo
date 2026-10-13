@@ -1,27 +1,19 @@
 import type { MetadataRoute } from "next";
 import { connection } from "next/server";
-import { getProductPage } from "@/app/lib/catalog";
+import { getCategories, getProductPage } from "@/app/lib/catalog";
+import { absoluteSiteUrl, getSiteOrigin } from "@/app/lib/site";
 
-const productUrlLimit = 49_998;
 const pageSize = 100;
 const apiMaxPages = 10_000;
-
-function siteOrigin(): string {
-  const configuredUrl = process.env.APP_URL ?? "http://localhost:3000";
-  try {
-    const url = new URL(configuredUrl);
-    if (!["http:", "https:"].includes(url.protocol)) throw new Error();
-    return url.origin;
-  } catch {
-    throw new Error("APP_URL must be a valid HTTP(S) URL.");
-  }
-}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   await connection();
 
-  const origin = siteOrigin();
-  const firstPage = await getProductPage("page=1&pageSize=100");
+  const [categories, firstPage] = await Promise.all([
+    getCategories(),
+    getProductPage("page=1&pageSize=100"),
+  ]);
+  const productUrlLimit = 50_000 - 3 - categories.length;
   if (firstPage.meta.total > productUrlLimit) {
     throw new Error(
       "The catalog exceeds the single-sitemap limit; sitemap index support is required.",
@@ -53,17 +45,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     {
-      url: origin,
+      url: getSiteOrigin(),
       changeFrequency: "daily",
       priority: 1,
     },
     {
-      url: `${origin}/products`,
+      url: absoluteSiteUrl("/products"),
       changeFrequency: "daily",
       priority: 0.8,
     },
+    {
+      url: absoluteSiteUrl("/categories"),
+      changeFrequency: "daily",
+      priority: 0.8,
+    },
+    ...categories.map((category) => ({
+      url: absoluteSiteUrl(
+        `/categories/${encodeURIComponent(category.slug)}`,
+      ),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
     ...products.map((product) => ({
-      url: `${origin}/products/${encodeURIComponent(product.slug)}`,
+      url: absoluteSiteUrl(
+        `/products/${encodeURIComponent(product.slug)}`,
+      ),
       changeFrequency: "weekly" as const,
       priority: 0.6,
       images: product.images.map((image) => image.url),

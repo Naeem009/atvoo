@@ -13,6 +13,7 @@
     "build:api": "npm run build --workspace=@imtiaz-mart/api",
     "start": "next start",
     "lint": "eslint",
+    "test:storefront": "node scripts/test-phase2-storefront.mjs",
     "db:generate": "./packages/database/node_modules/.bin/prisma generate --schema packages/database/prisma/schema.prisma",
     "db:validate": "./packages/database/node_modules/.bin/prisma validate --schema packages/database/prisma/schema.prisma",
     "db:migrate:deploy": "./packages/database/node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma",
