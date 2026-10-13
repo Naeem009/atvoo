@@ -1,13 +1,37 @@
 # ATVOO Developer Handbook (v4 — Build-Ready Edition)
 
 **Project:** ATVOO ("AI-Based Most Modern Shopping Store")
-**Repository:** `imtiaz_mart`
+**Repository:** `atvoo`
 **Audience:** Developers, technical leads, QA engineers, DevOps engineers, and AI coding agents (including Cursor)
-**Document status:** Source of truth for architecture, infrastructure, process, and UI/UX implementation
+**Document status:** Source of truth for resolved requirements and development process; implementation status is verified against the current source tree
 **Supersedes:** v3 (Supabase + n8n edition); all prior versions are historical only
-**Last verified:** 2026-09-22
+**Last verified:** 2026-10-13
 
-This is the primary onboarding and operating guide for the ATVOO monorepo. It explains how the system is organized, how to run it, how to change it safely, and how to deploy it. The numbered specification documents in `docs/` remain the domain specifications — they describe product intent and target architecture. This handbook records the relationship between those requirements and the code, and is the operational source of truth for infrastructure, environment, and process.
+This is the primary onboarding and operating guide for the ATVOO repository. It explains the intended system, how to run the code that exists today, and how to develop it safely. The numbered specification documents describe product requirements and target architecture; they do not prove that a feature exists. This handbook resolves requirements and documents the supported workflow. The checked-in source, tests, migrations, and package scripts are authoritative evidence of implementation. If a status claim here conflicts with that evidence, the code is the implementation source of truth and this handbook must be corrected. Deployment and remote-service status must be described as unverified until actually verified.
+
+### Current repository baseline (verified 2026-10-13)
+
+The repository is in **Phase 2 — Catalog and discovery**; the Phase 2 exit
+gate remains open. The current source is
+a root-level Next.js storefront (`app/`) plus a small NestJS API workspace
+(`apps/api/`) and a Prisma catalog workspace (`packages/database/`). The API
+implements public product listing/search/detail, categories, and brands. It
+does not yet power the storefront: the only Next.js page is the homepage, and
+there are no catalog product pages, search/filter UI, JSON-LD, sitemap, robots,
+or other no-JS catalog SEO surfaces.
+
+The catalog schema, three Prisma migrations, matching Supabase SQL migrations,
+API build/tests, schema validation, migration-contract tests, lint, and
+storefront production build have been verified. The migration set was applied
+to disposable local PostgreSQL 17 for validation. This does **not** establish
+that migrations were applied to a hosted Supabase project, that Storage buckets
+exist, or that production deployment/credentials are configured. Do not claim
+those integrations as live without fresh evidence.
+
+The only currently supported root commands are the scripts in the root
+`package.json`; the exact list is in §16.1. Commands and paths named elsewhere
+in this handbook are target requirements unless they also exist in the current
+source and package scripts.
 
 ## Cursor / AI-agent operating rule (binding)
 
@@ -33,9 +57,9 @@ v2 adapted the project to Supabase without having seen the numbered specificatio
 2. **RBAC permissions and subscription entitlements are two different authorization axes.** A vendor user can have the `social:write` permission and still be blocked by the `social.automation.enabled` entitlement if their plan doesn't include it. Previous revisions of this handbook only modeled permissions. See §1.2.
 3. **AI Agent Commerce (UCP/ACP/Perplexity) is a named, dated, protocol-specific integration**, not a vague future capability. §9.6 is rewritten around the actual protocols and a recommended low-risk MCP pilot.
 
-Everything from v2 regarding Supabase as the managed Postgres provider, RLS default-deny, Supabase Storage for uploads, and the canonical deployment paths remains in force and is **independently corroborated** by `SETUP_DATABASE.md` and `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md` (both explicitly name Supabase PostgreSQL as the database). Those sections are carried forward with minor corrections (UUID v7, not generic UUID; n8n added to the architecture diagram).
+The specifications continue to define Supabase PostgreSQL as the target managed database and default-deny RLS as a requirement. The current repository contains catalog migrations and API configuration for Supabase, but does not demonstrate a live hosted project, Storage upload/provisioning, n8n deployment, or canonical production deployment paths. Target architecture in this handbook must not be mistaken for shipped behavior; the repository baseline above and §10 record the verified implementation status.
 
-v4 closes out every remaining item that would otherwise require a clarifying question mid-build: the three cross-document faults surfaced by reading all specs together (§0.3), and a complete, opinionated UI/UX implementation system (§7) so screens don't stall on undefined tokens, states, or breakpoints. See §0.4 for the standing confirmation that this document is build-ready.
+v4 resolves requirements and supplies an opinionated UI/UX system (§7). “Build-ready” describes those target requirements; it does not mean the full system is implemented. Check the current repository baseline above and §10 before describing any capability as shipped.
 
 ### 0.3 Cross-document faults, resolved here
 
@@ -56,11 +80,11 @@ POST  /admin/payouts/batches/run            trigger a payout batch (gated behind
 GET   /vendor/payouts/escrow                vendor-scoped read-only view of their own held/released escrow
 ```
 
-**Also resolved, not deferred:** `SETUP_DATABASE.md` is **superseded by this handbook (§3–§4) and retired**. Its content is fully absorbed here; do not maintain it as a second source of Supabase setup instructions. Delete it from the repository, or if it must remain for a transitional period, replace its body with a single line pointing to this handbook and remove its row from `README.md`'s document table.
+**Also resolved, not deferred:** `SETUP_DATABASE.md` is superseded by this handbook (§3–§4). Keep it as a pointer only; do not maintain it as a second source of database setup instructions.
 
 ### 0.4 Definition of ready (standing confirmation)
 
-This handbook is build-ready: every technical decision has a resolved default (§0.1), the payout/escrow flow is schema- and API-complete pending only a finance/legal flag (§0.2), the three cross-document contradictions are reconciled (§0.3), and the UI/UX system in §7 specifies tokens, states, breakpoints, and component behavior completely enough that no screen should require an undocumented judgment call. If Cursor (or a developer) hits a genuine ambiguity this document doesn't cover, that is itself a defect in this handbook — fix the handbook in the same PR as the code, per §15, rather than resolving it silently in one place only.
+This handbook resolves target requirements and cross-document contradictions; it is not evidence that those requirements have been implemented. For current implementation status, use the repository baseline above and §10. If Cursor (or a developer) hits a genuine ambiguity this document doesn't cover, fix the handbook in the same PR as the code, per §15, rather than resolving it silently in one place only.
 
 ## How to use this handbook
 
@@ -239,7 +263,7 @@ Changing an ID in a request must never allow cross-vendor access, at any step in
 | Admin | Manage platform operations within assigned RBAC permissions. |
 | Super admin | Full platform administration and emergency controls. |
 
-Seed data (`db:seed`) must create these roles under stable slugs (`customer`, `vendor_owner`, `vendor_staff`, `affiliate`, `support_agent`, `inventory_manager`, `marketing_manager`, `finance_manager`, `admin`, `super_admin`) per `SETUP_DATABASE.md`, each mapped to a fixed permission set.
+**Target requirement only:** when application seeding and RBAC are implemented, seed these roles under stable slugs (`customer`, `vendor_owner`, `vendor_staff`, `affiliate`, `support_agent`, `inventory_manager`, `marketing_manager`, `finance_manager`, `admin`, `super_admin`) with fixed permission sets. The current schema/API does not implement roles or this seed data.
 
 #### 1.2.1 Permission model (binding — implement exactly this)
 
@@ -283,77 +307,73 @@ Commissions, vendor subscriptions, sponsored placement, advertising, affiliate c
 
 ---
 
-## 2. Repository layout
+## 2. Repository layout and source ownership
+
+The following is the current tracked application layout. Paths that appear in
+the target-architecture sections are requirements, not additional workspaces.
 
 ```text
-imtiaz_mart/
+atvoo/
+├── app/                        Root Next.js App Router (currently homepage only)
+├── public/                     Static assets
 ├── apps/
-│   ├── web/                    Next.js storefront and portals
-│   └── api/                    NestJS REST API
+│   └── api/                    NestJS catalog REST API and tests
 ├── packages/
-│   ├── database/               Prisma schema, migrations, client package
-│   └── shared/                 Shared TypeScript types and constants
+│   └── database/               Prisma schema, migrations, and migration tests
 ├── supabase/
-│   ├── config.toml              Supabase CLI project config (linked project)
-│   └── migrations/              RLS policies, extensions, storage buckets — kept in lockstep with Prisma migrations (§8.2)
-├── workflows/
-│   └── n8n/                     Exported, version-controlled n8n workflow JSON (WF-01..WF-10, §9.8.3) — the versioned artifact referenced by SocialWorkflowRuns.workflow_version
-├── docs/                       Specifications and developer documentation (01–07, this handbook, README, SETUP_DATABASE)
-├── .github/
-│   └── workflows/               CI: lint, build, test, migrate-deploy, deploy
-├── docker-compose.local.yml    OPTIONAL: local Redis + local Postgres for fully offline development only
-├── package.json                Root workspace scripts and lifecycle hooks
-├── package-lock.json           Canonical npm lockfile
-├── vercel.json                 Storefront deployment configuration
-└── .env.example                Environment variable template
+│   └── database/               Prisma schema and migrations
+├── PROJECT DOCUMENTATIONS/     Developer handbook and numbered specifications
+├── package.json                Root scripts and npm workspaces
+├── package-lock.json           Root lockfile
+├── .env.example                Environment variable template
+└── next.config.ts              Next.js configuration
 ```
 
 ### 2.1 Workspace responsibilities
 
-**`apps/web`** owns the browser-facing experience: Next.js App Router, route groups, server components by default, client components where interaction requires them, shared API/action helpers under `lib/`.
+**`app/`** is the root Next.js App Router application. The current route is
+`app/page.tsx`; catalog pages and API integration remain to be implemented.
 
-**`apps/api`** owns authentication, authorization, catalog, commerce, administration, integrations, and public machine-readable endpoints. Its global prefix is `/api`; URI versioning adds `/v1`. Per `05_DEVELOPMENT_STANDARDS.md`, each feature module follows **Clean Architecture / DDD boundaries within the Nest module structure**: controllers are transport-only, services hold domain/business rules, and a repository-pattern boundary sits between services and Prisma — see §6.1.
+**`apps/api`** is the current NestJS public catalog API. It implements public
+product list/search/detail, categories, and brands. Authentication, RBAC,
+commerce, administration, uploads, and the other modules described in the
+specifications are target work, not current functionality.
 
-**`packages/database`** owns the Prisma schema, migration history, generated Prisma client access, and seed scripts.
+**`packages/database`** owns the current Prisma catalog schema and migration
+history. There is no application seed script.
 
-**`packages/shared`** owns types and constants shared by web and API, including the `Permission` and entitlement-key enums (§1.2.1, §1.2.2). Keep it free of server-only dependencies and browser-only dependencies.
-
-**`supabase/`** owns the link between this repository and the hosted Supabase project(s), plus RLS policy SQL and storage bucket definitions that Prisma does not model directly.
-
-**`workflows/n8n/`** owns the exported JSON of every production n8n workflow, so that "if n8n is deleted, recreated, or replaced, business state must remain intact" (`06` §35) is actually achievable — a workflow that exists only inside the n8n UI with no exported artifact in version control is not considered production-ready.
+**`supabase/migrations/`** contains raw SQL counterparts to the Prisma
+migrations for catalog policies and search. A directory of migration files
+does not establish that a hosted project has received them.
 
 ### 2.2 Dependency direction
 
 ```text
-web  ───────────────┐
-                    ├── shared
-api  ── database ───┘
-n8n  ── api (HTTP, scoped service credential) ── database
+Next.js app ──(catalog API integration: not implemented)──> NestJS API
+NestJS API ──> Prisma catalog schema ──> PostgreSQL
 ```
 
-n8n never connects to the database directly for business mutations (§9.8.2). The database package must not import application modules. Shared types must not import Prisma, NestJS, Next.js, or runtime secrets.
+The intended boundary is binding: the browser-facing app must access catalog
+data through the API, not directly through Supabase. The current homepage does
+not yet consume that API. The broader n8n, shared package, and commerce
+boundaries below remain target architecture.
 
 ### 2.3 Important source locations
 
 | Concern | Location |
 | --- | --- |
-| API module composition | `apps/api/src/app.module.ts` |
-| API bootstrap, versioning, CORS, Swagger | `apps/api/src/main.ts` |
-| API feature modules | `apps/api/src/modules/` |
-| API guards and filters | `apps/api/src/common/` |
-| Permission enum and role→permission map | `packages/shared/src/rbac.ts` |
-| Entitlement key enum and plan→entitlement map | `packages/shared/src/entitlements.ts` |
-| Web routes | `apps/web/app/` |
-| Web reusable UI | `apps/web/components/` |
-| Web API/action helpers | `apps/web/lib/` |
-| Design tokens | `apps/web/lib/design-tokens.ts` (must match §3 of `03_UI_UX_DESIGN_SYSTEM.md` — see §7.2) |
-| Shared exports | `packages/shared/src/index.ts` |
-| Database schema | `packages/database/prisma/schema.prisma` |
-| Database seeds | `packages/database/prisma/seed*.ts` |
-| RLS policy SQL | `supabase/migrations/` |
-| n8n workflow exports | `workflows/n8n/` |
-| Optional offline local services | `docker-compose.local.yml` |
-| Deployment config | `vercel.json`, `apps/api/Dockerfile`, `.github/workflows/` |
+| Web routes and layout | `app/` |
+| Web global styles | `app/globals.css` |
+| API bootstrap and global configuration | `apps/api/src/main.ts` |
+| API module composition | `apps/api/src/modules/api.module.ts` |
+| API catalog controller/service | `apps/api/src/modules/catalog/` |
+| API tests | `apps/api/test/` |
+| Prisma schema | `packages/database/prisma/schema.prisma` |
+| Prisma migrations | `packages/database/prisma/migrations/` |
+| Supabase SQL migrations | `supabase/migrations/` |
+| Database migration contract tests | `packages/database/test/` |
+| Root scripts and workspaces | `package.json` |
+| Environment variable names/placeholders | `.env.example` |
 
 ---
 
@@ -361,36 +381,41 @@ n8n never connects to the database directly for business mutations (§9.8.2). Th
 
 ### 3.1 Required tools
 
-- Node.js 20 LTS or newer, pinned via `.nvmrc`.
+- Node.js 20 LTS or newer. The repository does not currently include a `.nvmrc`.
 - npm with workspace support.
-- The [Supabase CLI](https://supabase.com/docs/guides/cli).
+- The [Supabase CLI](https://supabase.com/docs/guides/cli) only when applying the raw SQL migrations to a linked Supabase project.
 - Git.
-- A Supabase account with a **development** project dedicated to this purpose — never develop against the production project.
-- An n8n instance for local workflow development: either a personal n8n Cloud workspace, or `npx n8n` / Docker locally. Not required for pure API/frontend work that doesn't touch social automation.
-- Docker Engine — only required for the fully offline fallback (`docker-compose.local.yml`) or local n8n.
+- A disposable PostgreSQL 17 database for local migration validation, or an explicitly selected Supabase development project when remote integration is intended. Never develop against the production project.
 
 ### 3.2 First-time setup (standard path)
 
-1. Create a Supabase development project. Enable `pgvector` and `pg_trgm` under **Database → Extensions**.
-2. Copy the **Transaction pooler** string (port `6543`) for `DATABASE_URL` and the **Session pooler**/**Direct connection** string (port `5432`) for `DIRECT_URL` from **Project Settings → Database**.
-3. Copy the project URL, `anon` key, and `service_role` key from **Project Settings → API**.
-4. Create the Storage buckets listed in §9.9 if not already present (or run the bootstrap script in step 6, which is idempotent).
+1. Choose a disposable local PostgreSQL 17 database or a Supabase development project. Current catalog migrations manage the required search extensions; `pgvector` is not used by the current implementation.
+2. Configure `DATABASE_URL` for API runtime and `DIRECT_URL` for Prisma CLI migrations. Do not put real credentials in source control.
+3. Configure `SUPABASE_URL` and `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` for the current catalog API. The current API constructs public media URLs; it does not upload files or provision buckets.
 
 ```bash
 cp .env.example .env
-# fill in DATABASE_URL, DIRECT_URL, SUPABASE_URL, SUPABASE_ANON_KEY,
-# SUPABASE_SERVICE_ROLE_KEY from the values above
+# Fill in only the environment values required for the task.
 npm ci
-supabase link --project-ref <your-dev-project-ref>
-npm run db:migrate:deploy
-npm run db:bootstrap:supabase   # creates storage buckets, applies RLS policies — §8.6/§9.9
-npm run db:seed
+npm run db:validate
+npm run db:generate
+npm run lint
+npm run build
+npm run build:api
+npm run test:api
+npm run db:test
 ```
 
-Start the applications in separate terminals:
+Only after confirming that the configured database is the intended development
+project and reviewing the migration diff, apply Prisma migrations with
+`npm run db:migrate:deploy`. Apply matching SQL migrations to the explicitly
+linked Supabase project with `supabase db push`. Neither command provisions
+Storage buckets; the current repository has no Storage bootstrap command.
+
+Start the currently implemented applications in separate terminals:
 
 ```bash
-npm run dev:web
+npm run dev
 npm run dev:api
 ```
 
@@ -400,107 +425,84 @@ Default URLs:
 | --- | --- |
 | Storefront | `http://localhost:3000` |
 | API base | `http://localhost:3001/api/v1` |
-| Health endpoint | `http://localhost:3001/api/v1/health` |
 | Swagger UI | `http://localhost:3001/api/docs` |
-| Database | hosted Supabase project (no local port) |
-| Redis | Upstash dev database, or local Redis if using the offline fallback |
-| n8n (if run locally) | `http://localhost:5678` |
+| Health endpoint, Redis, n8n | Not implemented/configured in this repository baseline |
 
 ### 3.3 Offline fallback (no Supabase connectivity)
 
-`docker-compose.local.yml` provides local PostgreSQL 17 and local Redis only. This does not exercise `pgvector` parity unless the image includes the extension, and does not exercise Supabase Storage, RLS, or n8n. Treat it strictly as a fallback for API/business-logic work, not a substitute for pre-release verification.
-
-```bash
-docker compose -f docker-compose.local.yml up -d
-npm run db:migrate:deploy   # DATABASE_URL and DIRECT_URL both point at the local instance
-npm run db:seed
-```
+There is no checked-in Docker Compose configuration in the current repository.
+For isolated migration testing, use an explicitly disposable PostgreSQL 17
+instance, and stop/remove that instance when validation completes. This does
+not validate hosted Supabase configuration, Storage, production credentials,
+or deployment.
 
 ### 3.4 Installation lifecycle
 
-Root `postinstall`: `shared build -> Prisma generate -> database build`. Generation must happen before the database build because `packages/database/src/index.ts` imports `@prisma/client`. The Prisma CLI is a production dependency of `packages/database` because Vercel and similar hosts may omit dev dependencies while still executing `postinstall`.
+The current root install does not define a `postinstall` lifecycle, a shared
+package build, or a database package build. Generate the Prisma client
+explicitly after installing dependencies:
 
 ```bash
 npm ci
-npm run generate --workspace=@imtiaz-mart/database
-npm run build --workspace=@imtiaz-mart/database
+npm run db:generate
 ```
 
-Do not solve generated-client errors by committing `node_modules` or generated runtime artifacts.
+Do not treat generated client files as application source. Verify package
+installation and generation when a clean install does not produce a working
+client.
 
 ### 3.5 Seed data
 
-`npm run db:seed` creates the roles in §1.2 with their permission mappings, demo users, a demo vendor, a premium vendor subscription (with its entitlement set, §1.2.2), catalog data, CMS data, and platform settings.
-
-| Account | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@example.com` | `Admin123!` |
-| Vendor | `vendor@example.com` | `Vendor123!` |
-| Vendor staff | `vendor-staff@example.com` | `Vendor123!` |
-| Customer | `customer@example.com` | `Customer123!` |
-| Affiliate | `affiliate@example.com` | `Affiliate123!` |
-
-**Automated guard, not just a warning:** `db:seed` checks `NODE_ENV` and an `ALLOW_SEED` flag, and refuses to run (non-zero exit) if `DATABASE_URL` resolves to the project ref recorded as production in `.env.production.example`.
+There is no current `db:seed` command or application seed script. The first
+catalog migration seeds reference categories and the `Unbranded` brand only;
+it does not create demo accounts, vendors, or products. Never rely on the
+example/demo credentials documented in older revisions.
 
 ---
 
 ## 4. Configuration and environment
 
-The root `.env.example` is the authoritative variable inventory, split by environment. Do not commit `.env` or provider credentials.
+The root `.env.example` contains the current environment template. It is not a
+complete inventory for the target architecture. Never commit `.env` or
+provider credentials.
 
 ### 4.1 Variable reference
 
 | Variable | Consumer | Required | Notes |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | API, Prisma runtime | Yes | Supabase **transaction pooler**, port `6543`, `?pgbouncer=true&connection_limit=1` if the process is short-lived; a higher `connection_limit` is fine on a long-running host. |
-| `DIRECT_URL` | Prisma CLI (migrate, introspect) | Yes | Supabase **session pooler**/direct connection, port `5432`. CLI/CI only, never at request-serving runtime. |
-| `SUPABASE_URL` | API | Yes | `https://<ref>.supabase.co`. |
-| `SUPABASE_SERVICE_ROLE_KEY` | API (server only) | Yes | Bypasses RLS entirely. Never in the browser, never logged, never a `NEXT_PUBLIC_*` variable. |
-| `SUPABASE_ANON_KEY` | Not used server-side; documented only so it's recognized and never mistaken for the service key | No | This project does not call Supabase from the browser (§7.1). |
-| `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` | API | Yes | Bucket name for vendor product images, §9.9. |
-| `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS` | API | Social/production | Bucket for social-post media assets (§9.8.5) — durable object storage, never local disk or ephemeral n8n files, per `06` §15. |
-| `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` | API | Local/production | Cache, rate-limit counters, and BullMQ queues (outbox dispatcher, §9.8.2). |
-| `N8N_BASE_URL` | API (outbound) | Social/production | Base URL of the linked n8n instance (self-hosted or n8n Cloud). |
-| `N8N_WEBHOOK_SIGNING_SECRET` | API, n8n | Social/production | HMAC secret used to sign/verify webhook calls in both directions (`06` §38). |
-| `N8N_SERVICE_API_KEY` | n8n → API | Social/production | Narrowly scoped, rotatable credential n8n uses to call ATVOO APIs — never a broad database credential (`06` §39). |
-| `SOCIAL_ENCRYPTION_KEY` | API | Social/production | At least 32 characters; encrypts OAuth material for every connected platform. |
-| `META_APP_ID` / `META_APP_SECRET` | API | Social/production (Phase 1) | Facebook/Instagram OAuth app credentials — required first, per implementation order §9.8.7. |
-| `PINTEREST_APP_ID` / `PINTEREST_APP_SECRET` | API | Social/production (Phase 3) | |
-| `TIKTOK_APP_ID` / `TIKTOK_APP_SECRET` | API | Social/production (Phase 3) | |
-| `X_APP_ID` / `X_APP_SECRET` | API | Social/production (Phase 3) | Verify actual API access level and rate limits for the developer account before enabling (`06` §41). |
-| `GOOGLE_BUSINESS_PROFILE_CLIENT_ID/SECRET` | API | Social/production (Phase 5) | |
-| `EMAIL_PROVIDER_API_KEY` | API | Production | Transactional email via **Resend** (default, §0.1). Consumed only inside `apps/api/src/modules/notifications/email/`, never referenced by name elsewhere in the codebase, so swapping providers later stays a one-module change. |
-| `NODE_ENV` | API/web | Yes | `production` only in deployed environments. |
-| `API_PORT` | API | Local/host | Defaults to `3001`. |
-| `API_URL` | API/integrations | Recommended | Public API origin. |
-| `APP_URL` | API | Production | Public storefront origin used in links, feeds, and UTM generation (§9.8.6). |
-| `CORS_ORIGIN` | API | Production | Comma-separated allowed storefront origins, exact match, protocol included. |
-| `NEXT_PUBLIC_API_URL` | Web | Yes | API URL ending in `/api/v1`. |
-| `NEXT_PUBLIC_APP_URL` | Web/API | Yes | Public storefront URL. |
-| `NEXT_PUBLIC_APP_NAME` | Web | Recommended | Display and metadata name. |
-| `JWT_SECRET` / `JWT_REFRESH_SECRET` | API | Production | Separate strong secrets; never `change-me`. |
-| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | API | Recommended | e.g. `15m` / `7d`. |
-| `STRIPE_SECRET_KEY` | API | Optional | Sandbox behavior exists when absent; required for ACP agentic checkout if ATVOO/vendor take that path (§9.6). |
-| `JAZZCASH_MERCHANT_ID` / `EASYPAISA_STORE_ID` | API | Optional | Local payment provider credentials. |
-| `PLATFORM_FEE_RATE` | API/seed | Recommended | Marketplace commission configuration. |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Web/API | Optional | Customer social login (distinct from Google Business Profile above). |
-| `ALLOW_SEED` | API/scripts | Local/CI only | Must be unset or `false` in any environment pointed at a production database. |
+| `DATABASE_URL` | API startup and Prisma | Required by API | Database URL; the API checks presence. Configure a suitable Supabase pooler or PostgreSQL connection string for the selected environment. |
+| `DIRECT_URL` | Prisma CLI | Required for migration operations | Direct/session PostgreSQL connection used by Prisma migrations. |
+| `SUPABASE_URL` | API startup / media URL construction | Required by API | HTTP(S) Supabase project URL. The current API does not use the service-role key. |
+| `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` | API startup / media URL construction | Required by API | Bucket name used when forming product image URLs. This does not provision the bucket or implement uploads. |
+| `CORS_ORIGIN` | API | Optional | Comma-separated allowed origins; if unset, CORS origins are disabled. |
+| `API_PORT` | API | Optional | Defaults to `3001`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Not currently consumed | No | Present as an empty placeholder in `.env.example`; any future use must remain server-only and must not bypass intended authorization. |
 
-In production, `apps/api/src/app.module.ts` must reject missing, placeholder, or localhost values for key settings, reject a `DATABASE_URL`/`DIRECT_URL` that doesn't resolve to the environment's registered Supabase project ref, and require a 32-character social encryption key.
+The root Next.js homepage does not currently require an API URL or Supabase
+credential. The API does not yet implement project-ref matching or production
+placeholder checks.
 
 ### 4.2 Environments and project separation
 
-Maintain **three separate Supabase projects**: `dev`, `staging`, `production`. Never point a staging or production `.env` at the dev project or vice versa. Development, staging, and production **social platform app credentials and n8n service credentials must also be completely separate** (`06` §39) — a staging OAuth app must never be able to publish to a real, connected vendor's account.
+Separate development, staging, and production projects/credentials are target
+operational requirements, not environments currently configured by this
+repository. Never use a production database for local testing.
 
 ### 4.3 Secret handling
 
-Generate secrets with a password manager or a cryptographically secure generator. Store them in the API host's/Vercel's secret storage, n8n's credential store (scoped, rotatable), and GitHub Actions encrypted secrets — never in repository files. Rotate compromised secrets, invalidate affected sessions/tokens, and record the incident (§11.3).
+Generate secrets with a password manager or a cryptographically secure
+generator. Store credentials in the selected host's secret manager, never in
+repository files. Rotate compromised secrets, invalidate affected
+sessions/tokens where applicable, and record the incident (§11.3).
 
 ---
 
 ## 5. System architecture
 
-### 5.1 Request flow
+The architecture below describes the target platform. The current implementation
+is the smaller catalog slice described in the repository baseline and §10.
+
+### 5.1 Target request flow
 
 ```mermaid
 flowchart LR
@@ -519,23 +521,45 @@ flowchart LR
   N8N --> Adapters[Platform adapters: Meta, Pinterest, TikTok, X, Google Business]
 ```
 
-PostgreSQL full-text search and `pgvector` serve catalog and visual search respectively; Elasticsearch is not part of the default architecture (§0 of v2, carried forward). n8n never mutates production tables directly — it calls the same authenticated, permission- and entitlement-checked ATVOO API surface as any other client (`06` §36).
+This is a target, not a depiction of currently wired integrations. The current
+catalog API uses PostgreSQL full-text/trigram search; visual search, pgvector
+queries, Redis, the outbox, n8n, platform adapters, JWT/RBAC/entitlement guards,
+and Supabase Storage uploads are not implemented. n8n must never mutate
+production tables directly when that target subsystem is built.
 
-Public machine-readable commerce endpoints are excluded from the global `/api` prefix and served at the storefront origin, including `/.well-known/commerce-manifest.json`, `/llms.txt`, and `/feeds/*` (§9.6). Confirm proxy/routing behavior when deploying the API separately from the storefront.
+### 5.2 Current API bootstrap
 
-### 5.2 API bootstrap
+`apps/api/src/main.ts` requires `DATABASE_URL`, `SUPABASE_URL`, and
+`SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA`. It configures CORS from
+`CORS_ORIGIN`, validates or generates a request ID, applies the `/api/v1`
+prefix, installs a transforming/whitelisting global `ValidationPipe`, a
+structured exception filter, Swagger at `/api/docs`, and shutdown hooks. The
+API listens on `API_PORT` or port `3001`. It does not currently configure
+authentication, rate limiting, JWT/RBAC/entitlement guards, project-ref
+validation, or a health route.
 
-`apps/api/src/main.ts` configures the global `/api` prefix, URI versioning (`/api/v1`), public route exclusions for the commerce manifest/feeds/`llms.txt`, a global `ValidationPipe` with transformation and whitelist filtering, CORS with comma-separated configured origins, Swagger at `/api/docs`, and a startup check that fails fast if `DATABASE_URL`/`DIRECT_URL` don't match the expected Supabase project ref for the current `NODE_ENV`.
+### 5.3 Current API module and routes
 
-`apps/api/src/app.module.ts` registers feature modules and global providers for the HTTP exception filter, throttling guard, JWT guard, RBAC guard, and entitlement guard (§1.2.2). New modules follow the same registration model.
+The current Nest module composition is `apps/api/src/modules/api.module.ts`
+with catalog and Prisma modules. Implemented public routes are:
 
-### 5.3 API module inventory
+```text
+GET /api/v1/products
+GET /api/v1/products/search
+GET /api/v1/products/:idOrSlug
+GET /api/v1/categories
+GET /api/v1/brands
+```
 
-`admin`, `affiliates`, `agent-commerce`, `auth`, `brands`, `cart`, `catalog`, `categories`, `cms`, `customers`, `dashboard`, `embeddings`, `feeds`, `health`, `loyalty`, `orders`, `payments`, `prisma`, `products`, `redis`, `returns`, `reviews`, `search`, `social-automation`, `storage`, `vendors`, `visual-search`, and supporting modules. A directory name alone is not proof a specification requirement is complete — inspect controllers, services, DTOs, and integration configuration.
+Swagger is available at `/api/docs`. This inventory is not the full API
+specified in `04_API_ARCHITECTURE.md`.
 
-### 5.4 Web route inventory
+### 5.4 Current web routes
 
-Public and portal routes for about, account, admin, affiliate, authentication, blog, brands, careers, cart, categories, checkout, compare, contact, deals, FAQ, help, orders, pages, privacy, products, refund, returns, search, shipping, shop, terms, tracking, vendor, vendors, and visual search, matching the website hierarchy in `01_PROJECT_MASTER_SPECIFICATION.md` §5. Dynamic routes include product/category/vendor/blog/page/order slugs and must preserve metadata, loading, error, and not-found behavior when changed.
+The Next.js application is at the repository root. `app/page.tsx` is the
+current homepage; `app/layout.tsx` and `app/globals.css` provide the root
+layout and styles. The catalog, portal, and legal routes in
+`01_PROJECT_MASTER_SPECIFICATION.md` are target routes and are not present.
 
 ---
 
@@ -612,12 +636,13 @@ Note the last row: it does not appear in `04_API_ARCHITECTURE.md` because the es
 
 ### 7.1 Next.js rules
 
+- The current Next.js app is rooted at `app/`; `apps/web/` is not a repository path.
 - Use the App Router; prefer Server Components for data loading and static structure; `"use client"` only when state, event handlers, browser APIs, or client-only libraries require it.
 - Keep secrets and server-only API calls out of client components.
-- Use existing helpers under `apps/web/lib/` before introducing another API client.
+- When wiring the catalog, route requests through the NestJS API. No shared API helper or storefront catalog integration exists yet.
 - Preserve route-level metadata, loading states, error boundaries, and accessible empty states.
 - Treat URL search parameters as part of the page contract for search, filters, pagination, and shareable views.
-- Never import `@supabase/supabase-js` or reference Supabase keys in `apps/web` — all data access goes through `NEXT_PUBLIC_API_URL`.
+- Never import `@supabase/supabase-js` or reference Supabase keys in the web app; all catalog data access must go through the API.
 
 ### 7.2 Design tokens (binding, per `03_UI_UX_DESIGN_SYSTEM.md`)
 
@@ -637,7 +662,7 @@ Design philosophy: premium, clean, modern, fast, trustworthy, mobile-first, conv
 | Text | `#0F172A` | `#F1F5F9` |
 | Muted | `#64748B` | `#94A3B8` |
 
-Dark-mode values are this handbook's resolved default (chosen to preserve the same relative contrast and hue relationships as the light set) — if `03_UI_UX_DESIGN_SYSTEM.md` is later amended with explicit dark-mode hex values, those take precedence and this row should be updated to match, per the source-of-truth hierarchy. Primary font **Inter**, fallback **Geist**, both loaded as variable fonts via `next/font` (no external font-CDN request, so no CLS from a late-loading font). `apps/web/app/globals.css` and `apps/web/lib/design-tokens.ts` must define these exact values as CSS custom properties (`--color-primary`, etc.) switched via a `data-theme` attribute or `prefers-color-scheme`, matching the token-based theming approach used across this project's tooling — reconcile any drift as a bug, not a design decision made in code.
+Dark-mode values are this handbook's resolved target default (chosen to preserve the same relative contrast and hue relationships as the light set) — if `03_UI_UX_DESIGN_SYSTEM.md` is later amended with explicit dark-mode hex values, those take precedence and this row should be updated to match. Primary font **Inter**, fallback **Geist**, are the target font stack. Implement the tokens in root `app/globals.css` (and add a separate token module only if needed); do not assume a token module, theme switcher, or these exact values are already present in the current homepage.
 
 ### 7.3 Typography, spacing, layout, and elevation scales (resolved defaults — not specified in `03`)
 
@@ -730,7 +755,7 @@ Build against `03_UI_UX_DESIGN_SYSTEM.md`'s full feature inventory, with the sta
 
 1. Identify whether the route is public, customer-protected, vendor-protected, or admin-protected.
 2. Read the owning API controller/service and shared DTOs.
-3. Add the route under `apps/web/app/` using existing route-group conventions.
+3. Add the route under root `app/`, following the routing conventions established by the current application.
 4. Keep data loading on the server when possible; client components only for interactive islands.
 5. Implement loading (skeleton), error (retry), empty, unauthorized, and not-found states per §7.5.
 6. Use the tokens, scales, and components from §7.2–§7.4 — no ad hoc colors, spacing, or one-off component patterns.
@@ -752,9 +777,21 @@ The browser may hide or redirect protected views for usability, but the API rema
 
 ### 8.1 Schema ownership
 
-The Prisma schema at `packages/database/prisma/schema.prisma` is the persisted data contract. Supabase-hosted PostgreSQL 17+ (with `pgvector`) is the primary database in every environment, confirmed independently by `02_DATABASE_ARCHITECTURE.md`, `SETUP_DATABASE.md`, and `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md`. **Identifiers are UUID v7**, not a generic UUID version — this is explicit in `02` and matters for index locality and time-ordering; do not substitute UUID v4 defaults without a reason recorded in the schema.
+The current persisted catalog contract is `packages/database/prisma/schema.prisma`.
+It defines seven models: `Vendor`, `Category`, `Brand`, `Product`,
+`ProductApproval`, `ProductVariant`, and `ProductImage`. IDs use the schema's
+UUID v7 database default. The current schema is only a catalog foundation; it
+does not include the broader model inventory below. Supabase-hosted PostgreSQL
+is the target managed database, but this handbook has not verified migration
+application to a remote project. The `pgvector` extension is not part of the
+current catalog implementation.
 
-Full domain-module inventory is defined in `02_DATABASE_ARCHITECTURE.md` and is not reproduced in full here to avoid the two documents drifting; confirm each model against that file before using it. The domains are: Authentication (Users, Roles, Permissions, UserRoles, Sessions, RefreshTokens, OAuthAccounts, Devices), Customer, Vendor, **Social Media Automation** (superseded by the revised model in `06` §27 — see §8.1.1 below), Visual Search, AI Agent Commerce, Product Catalog, Inventory, Order Management, Payment, Marketing, Customer Engagement, CMS, Notifications, Support, Analytics, and Audit.
+The broader domain inventory is a **target architecture** in
+`02_DATABASE_ARCHITECTURE.md`; confirm every model exists in the schema and
+migrations before using or claiming it. The domains include authentication,
+customer, vendor, social automation, visual search, agent commerce, catalog,
+inventory, orders, payments, marketing, CMS, notifications, support, analytics,
+and audit.
 
 Two domain-modeling decisions carry direct architectural weight and are binding:
 
@@ -783,54 +820,85 @@ PlatformCapability (per-platform capability registry, §9.8.1)
 
 `SocialPostQueue` from the original list may remain as an operational projection but must not be the sole source of social-post truth — `SocialPosts`/`SocialPostTargets` are authoritative. See §9.8 for the full workflow this model supports.
 
-### 8.2 Migration workflow
+### 8.2 Current migration workflow
 
 ```bash
-# edit schema.prisma
-npm run db:migrate                # creates + applies against DIRECT_URL locally
-npm run generate --workspace=@imtiaz-mart/database
-npm run build --workspace=@imtiaz-mart/database
+npm run db:validate
+npm run db:generate
+npm run db:migrate:deploy
+npm run db:test
 ```
 
-Use `npm run db:migrate:deploy` (against `DIRECT_URL`, never the pooled `DATABASE_URL`) in CI/deployment environments. Do not edit an applied migration.
+The root package currently provides no `db:migrate` authoring or
+`db:migrate:status` script. Use the installed Prisma CLI with the schema path
+when creating a migration, and never edit an applied migration. Validate
+configuration and review the destination before deploying. For the catalog,
+Prisma migrations and corresponding SQL under `supabase/migrations/` must stay
+aligned. The raw Supabase SQL was tested against the same disposable local
+PostgreSQL 17 database; that local verification does not prove remote
+application.
 
-Anything Prisma does not model directly — extensions, RLS policies, Storage bucket creation — lives as raw SQL under `supabase/migrations/` and is applied via `supabase db push` in the same PR and the same CI step as the Prisma migration it depends on. Never let the two migration histories diverge; a PR adding a table must add its RLS policy in the same PR.
+For an explicitly selected remote development project, review the migration
+diff and apply the Prisma migration and matching SQL using their respective
+tools. `supabase db push` is not a root npm script and may act on the currently
+linked project; verify the link before running it. Current migrations do not
+provision Storage buckets.
 
 For destructive or high-volume changes: verified restorable backup first, backfill separated from schema enforcement, compatible application code deployed before removing old columns/enum values, lock time and table size measured, rollback/forward-fix plan documented.
 
 ### 8.3 Prisma client, connections, and pooling
 
-- **Runtime queries** use `DATABASE_URL` (transaction pooler, port `6543`, `pgbouncer=true`, plus `connection_limit=1` if the process is short-lived).
-- **CLI/migration operations** always use `DIRECT_URL` (session pooler or direct, port `5432`) — running `migrate deploy` against the transaction pooler is the single most common Supabase+Prisma failure mode.
+- For Supabase deployments, **runtime queries** should use `DATABASE_URL` (typically the transaction pooler, port `6543`).
+- **CLI/migration operations** use `DIRECT_URL` (session pooler or direct connection); avoid running Prisma migrations through a transaction pooler.
 - Use transactions for multi-record commerce mutations: order creation, stock reservation, payment state changes, commissions, returns, and the outbox-write-plus-state-change pattern in §9.8.2.
 - Always apply tenant/ownership conditions in the query. Soft-deleted records excluded from normal reads. Explicit select/include shapes to avoid leaking sensitive fields or unbounded joins.
 
 ### 8.4 Seeds and local reset
 
-Seeds are safe to run repeatedly and guarded per §3.5. Prefer `prisma migrate reset` against a project you own for a full local rebuild; never against a shared or production project.
+There is no current seed script or reset command. The initial catalog
+migration inserts reference categories and the `Unbranded` reference brand;
+it does not create demo users, vendors, or products. Avoid reset commands
+unless the exact target database is disposable and independently verified.
 
-### 8.5 Inventory and warehouse model
+### 8.5 Inventory and warehouse model (target requirement)
 
-Vendors have one or more warehouses. `Inventory` stores a balance per warehouse and product variant, with a configurable low-stock threshold. `InventoryTransaction` records each RESTOCK, ADJUSTMENT, SALE, or RETURN movement with its delta, resulting quantity, reason, and actor. Vendor inventory UI at `/vendor/inventory`; API: `GET /api/v1/vendor/inventory`, `POST /api/v1/vendor/inventory/warehouses`, `PATCH /api/v1/vendor/inventory/warehouses/:warehouseId`. Stock adjustments are vendor-scoped, reject negative balances, and synchronize the aggregate `ProductVariant.stock` used by catalog, cart, and checkout.
+The warehouse/inventory model and `/vendor/inventory` UI/API routes below are
+target requirements. No inventory tables, vendor inventory routes, or checkout
+integration currently exist.
 
-First inventory view for an existing vendor creates a `Main warehouse` seeded from current variant stock. Checkout records a `SALE` transaction against the vendor's warehouse with the largest available balance and decrements the legacy aggregate variant stock. Multi-warehouse allocation/reservation across warehouses remains follow-up work (`02` also names `StockReservations` and `LowStockAlerts` as target models — confirm these exist before claiming reservation/alerting is implemented).
+The proposed model uses warehouse-level balances and inventory transactions;
+multi-warehouse allocation, reservations, and low-stock alerts remain target
+work and are not implemented.
 
-### 8.6 Row Level Security policy (binding)
+### 8.6 Row Level Security policy (target requirement; current catalog scope only)
 
-Every table has RLS enabled with a **default-deny** policy set:
+The current catalog migrations enable default-deny RLS for the catalog tables.
+This is not an audit or guarantee for future tables. Review the SQL migrations
+whenever a table is added; do not claim RLS coverage for the full target model
+until every implemented table and access path has been checked.
+
+Target requirement: every application table has RLS enabled with a **default-deny** policy set:
 
 ```sql
 alter table public."<Table>" enable row level security;
 -- no policies added = no access via anon/authenticated roles through PostgREST.
 ```
 
-The API's Prisma connection uses a role that bypasses RLS, so the API is unaffected. This layer exists solely so that if the anon key or a Supabase session token is ever used against this project's PostgREST endpoint — intentionally or through misconfiguration — it returns nothing. Applied in the same migration that creates each table (§8.2); CI fails if a new table ships without a corresponding policy statement. This applies to every table in the revised social-automation model (§8.1.1) as much as to catalog/commerce tables — `SocialPlatformWebhookEvents` and `SocialWorkflowRuns` are not exempt just because n8n is "trusted."
+Do not assume the API connection bypasses RLS or that absent tables have
+policies. For each future table, add and verify the appropriate policy in the
+same change. A future CI workflow should check this contract; there is no
+current CI workflow.
 
 If a future revision deliberately adopts Supabase Auth or client-side `supabase-js` access for a specific surface, that surface gets real, scoped RLS policies at that time — an explicit architectural decision, not a default.
 
 ---
 
-## 9. Business workflows
+## 9. Business workflows (target behavior)
+
+This section specifies intended workflows; it is not a feature inventory.
+Unless explicitly marked as current, its routes, screens, modules, and
+integrations are not implemented. The current public catalog API is listed in
+§5.3, and §10 is the verified feature-status matrix.
 
 ### 9.1 Authentication and authorization
 
@@ -844,7 +912,12 @@ Failure cases: duplicate email, invalid credentials, inactive/deleted user, expi
 
 ### 9.2 Product discovery and search
 
-Catalog data loads through API helpers. Public results exclude deleted/inactive records and apply availability/visibility rules. Search uses PostgreSQL full-text search (`tsvector`/`GIN`, `pg_trgm` for fuzzy matching) by default, per `01`'s "AI Search + Semantic/Vector Search + Visual Search, not just keyword LIKE-queries" design goal. Search and filter parameters must be bounded to prevent expensive unindexed queries.
+When the storefront is integrated, catalog data must load through the NestJS
+API. Current public API results exclude unpublished/inactive records and
+apply availability/visibility rules. Search uses PostgreSQL full-text and
+trigram indexes. Search/filter parameters must be bounded to prevent expensive
+unindexed queries. Product pages, structured metadata, and catalog UI remain
+target work.
 
 Product pages expose canonical metadata, images, price, variants, availability, vendor info, and `schema.org` `Product`/`Offer` structured data (§9.6). Product mutations belong to authorized vendor/admin services.
 
@@ -858,7 +931,9 @@ Order creation re-reads prices and inventory server-side, calculates totals and 
 
 Vendor owner/staff routes verify vendor membership and permission (§1.2.1) on every request. Product publication validates required catalog data, media, pricing, inventory, and visibility flags. Vendor analytics are scoped to that vendor. Payout calculations are based on authoritative order/payment/refund state, not browser totals.
 
-Current vendor product workflow: create, list, edit, submit, archive. Web edit form at `/vendor/products/[id]/edit`, API `PATCH /api/v1/vendor/products/:id`. Vendors edit name, descriptions, category, pricing, stock, status, primary image, AI-commerce eligibility flags (§9.6), and multiple variants. Vendor-created products always start `DRAFT/PENDING` regardless of client-requested status; only admin approval activates a listing. Reads/mutations scope to the resolved vendor store; existing variants are not hard-deleted (carts/orders reference them) — retire by setting stock to zero.
+The create/list/edit/submit/archive lifecycle, `/vendor/products/[id]/edit`
+screen, and `/api/v1/vendor/products/:id` routes are target requirements; no
+vendor product UI or API routes currently exist.
 
 ### 9.5 Admin operations
 
@@ -866,7 +941,12 @@ Admin actions use the permission model (§1.2.1), input validation, audit loggin
 
 #### 9.5.1 Product approval lifecycle
 
-Products have an independent `approvalStatus` (`PENDING`/`APPROVED`/`REJECTED`), optional `approvalNote`, and `reviewedAt`, in addition to the selling `status`. New vendor products enter `DRAFT/PENDING`. Vendors submit with `POST /api/v1/vendor/products/:id/submit`. Admins review from `/admin/products` via `POST /api/v1/admin/products/:id/approve` or `/reject`. Approval sets `ACTIVE/APPROVED` and indexes for search; rejection sets `DRAFT/REJECTED` and removes from search.
+The current schema defines `Product.approvalStatus` using
+`AUTO_APPROVED`/`PENDING_REVIEW`/`APPROVED`/`REJECTED` and records decisions
+in `ProductApproval`. Vendor submission and admin review UI/API routes shown
+here are target requirements and are not implemented. Public catalog visibility
+is enforced by the current catalog query; this is not an authenticated
+approval workflow.
 
 ### 9.6 AI-agent commerce (rewritten per `07_AI_AGENT_COMMERCE_READINESS.md`)
 
@@ -994,7 +1074,9 @@ Not complete merely because a post can be created. Complete only when OAuth work
 
 ### 9.9 Image upload and storage (Supabase Storage)
 
-Authenticated vendor product-image uploads: `POST /api/v1/uploads/product/:productId`, multipart field `file`, JPEG/PNG/WebP/GIF up to 5 MB.
+Target behavior (not implemented): authenticated vendor product-image uploads
+at `POST /api/v1/uploads/product/:productId`, multipart field `file`, JPEG /
+PNG / WebP / GIF up to 5 MB. The current API does not expose an upload route.
 
 1. API verifies vendor ownership of the product.
 2. API uploads to `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` using the service-role Storage client, path keyed by vendor and product ID.
@@ -1008,45 +1090,37 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 
 ## 10. Feature status
 
-| Capability | Status | Verification/source note |
+| Capability | Status | Verified evidence / limit |
 | --- | --- | --- |
-| Next.js storefront and portal routes | Implemented | `apps/web/app/`, successful production build. |
-| NestJS REST API and Swagger | Implemented | `apps/api/src/main.ts`, module controllers. |
-| Prisma/Supabase PostgreSQL persistence (UUID v7) | **Needs confirmation** | Confirm ID generation strategy is actually v7, per `02`, not a generic UUID default. |
-| RLS default-deny policies on all tables, including SMAE tables | **Needs confirmation** | §8.6; audit every table, including the revised social-automation model (§8.1.1). |
-| Supabase Storage for product media and social assets | **Needs confirmation** | Two buckets now required (§9.9); confirm no local-disk code path remains. |
-| Upstash Redis for cache/queues/outbox dispatch | **Needs confirmation** | Confirm ioredis/BullMQ configuration points at Upstash in every non-local environment. |
-| PostgreSQL full-text search (catalog) | **Needs confirmation** | Confirm `tsvector`/`GIN` indexes exist. |
-| pgvector visual search | Partial/planned | Extension enablement and index strategy per §9.7; embedding provider, index type, and threshold tuning remain. |
-| RBAC permission model (§1.2.1) | Partial | Confirm guard implementation checks the enum, not role literals. |
-| Subscription entitlement model (§1.2.2) | **Needs confirmation** | New as of this revision; confirm entitlement keys exist and are checked server-side, separately from RBAC. |
-| Detailed inventory and warehouse management | Implemented | Reservations, transfers, alerts, multi-warehouse allocation remain follow-up work; confirm `StockReservations`/`LowStockAlerts` per `02`. |
-| Authentication and JWT/RBAC/entitlement guards | Partial | Core modules exist; entitlement-guard layer is new. |
-| Catalog, categories, brands, products | Implemented/partial | Core services exist; review completeness against `02`/`04`. |
-| Cart and order flows (single buyer Order + vendor sub-orders) | Implemented/partial | Confirm order-splitting model matches §8.1/§9.3, not per-vendor customer-facing orders. |
-| Payment providers, escrow, vendor payouts | Partial/prerequisite | Data model per `02`; build against the resolved default flow in §0.2. Schema/API can be completed now; the production release-of-funds job stays behind a flag pending finance/legal sign-off. |
-| Vendor portal and operations | Partial | Product CRUD implemented; payout lifecycle and permission granularity remain. |
-| Admin product approval | Implemented | Durable approval state, submission, approve/reject, notes, timestamps. |
-| Admin portal | Partial | Verify destructive-action audit coverage. |
-| CMS | Partial | Module and seeded content exist; publishing workflow requires verification. |
-| Reviews, wishlist, loyalty, affiliates, returns | Partial | Verify end-to-end workflows and tests. |
-| **SMAE: transactional outbox + n8n orchestration** | **Planned** | Net-new architecture per §9.8; not present in prior implementation. Build per the phased order in §9.8.7. |
-| **SMAE: platform capability registry** | **Planned** | §9.8.1; required before any platform adapter ships. |
-| **SMAE: vendor channel (Mode A)** | Partial/planned | Phase 1–2 scope, §9.8.7. |
-| **SMAE: store channel (Mode B)** | Planned | Phase 4 scope. |
-| AI commerce manifest and feeds (UCP/ACP/Perplexity) | Partial | Public service/controller paths exist; partner validation, freshness, attribution, checkout incomplete per §9.6. |
-| MCP pilot (`search_products`, `get_product_details`, `check_availability`) | Planned | Recommended low-risk first step, §9.6.4. |
-| Agentic checkout | Planned/prerequisite | Requires payment rail, fraud/dispute controls, attribution, partner approval, and the open payout-model decision (§0.1). |
-| Malware scanning on uploads | Planned/prerequisite | Not yet implemented; required before accepting untrusted vendor uploads at scale. |
-| Mobile apps/PWA | Planned | Product direction only unless a separate implementation is added. |
-| CI pipeline (lint/build/test/migrate) | **Needs confirmation** | §13.5; confirm `.github/workflows/` exists and is green on `main`. |
-| 80% automated test coverage | Target | Do not claim achieved without coverage output and maintained test suites. |
+| Next.js application | Partial | Root `app/` contains the homepage, layout, styles, and favicon; no catalog pages or portals. |
+| NestJS catalog API and Swagger | Implemented slice | `apps/api/src/`; public product list/search/detail, categories, and brands only. |
+| Catalog schema and migrations | Implemented foundation | `packages/database/prisma/` and aligned `supabase/migrations/`; not the full domain model in `02`. |
+| Public catalog visibility/search | Implemented slice | Catalog service enforces publication criteria; PostgreSQL full-text/trigram search migrations are present. |
+| Catalog RLS | Implemented for initial catalog tables | Default-deny policies are in the catalog migration set; no claim is made for future or absent tables. |
+| API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
+| Storefront catalog integration and no-JS SEO | Not implemented | No product/search routes, JSON-LD, sitemap, or robots surface currently exists. |
+| Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
+| Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
+| Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
+| Cart, checkout, orders, payments, escrow, payouts | Not implemented | No current schema/API implementation. |
+| Vendor/admin portals, CMS, reviews, loyalty, affiliates, returns | Not implemented | Target requirements only. |
+| Redis, outbox, n8n, social automation, visual search/pgvector | Not implemented | Target requirements only. |
+| CI/CD and production deployment | Not configured / unverified | No checked-in GitHub Actions workflows or API Dockerfile/deployment file. |
+| Test/build coverage | Partial | API and migration contract tests exist; no full-platform or coverage-threshold claim. |
+
+The list above is the implementation snapshot, not a release sign-off. Update
+it only after verifying the source and the relevant behavior.
 
 ---
 
 ## 11. Security and compliance
 
 ### 11.1 Baseline controls
+
+These are target security requirements, not a statement that the current
+catalog API implements every control. Current API controls are limited to the
+validation, CORS, request-ID, and structured-error behavior documented in
+§5.2. Verify each control in code before treating it as enforced.
 
 - Hash passwords with the approved password hashing implementation; separate strong JWT access/refresh secrets; rotate/revoke after suspicious activity.
 - Validate and whitelist request data with the global validation pipe; enforce CORS to known origins, no wildcard credentials; keep throttling enabled at §6.2 defaults.
@@ -1096,25 +1170,28 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 ### 12.1 Required checks
 
 ```bash
-npm run build --workspace=@imtiaz-mart/shared
-npm run generate --workspace=@imtiaz-mart/database
-npm run build --workspace=@imtiaz-mart/database
-npm run build --workspace=@imtiaz-mart/api
-npm run build:web
+npm run db:validate
+npm run db:generate
+npm run build
+npm run build:api
 npm run lint
-npm run test
+npm run test:api
+npm run db:test
 ```
 
-CI (§13.5) runs the full sequence on every pull request regardless. Record missing coverage as a gap; never claim the 80% target (`05_DEVELOPMENT_STANDARDS.md`) is met without coverage output.
+There is no configured CI workflow. Run the relevant commands locally for
+each change and record any unverified production behavior as a gap. Never
+claim the 80% target (`05_DEVELOPMENT_STANDARDS.md`) is met without coverage
+output.
 
 ### 12.2 Test layers
 
 - **Unit:** business rules, DTO behavior, calculators, guards, service edge cases; for SMAE specifically — entitlement checks, rule matching, frequency/cooldown logic, content validation, state-machine transitions, idempotency, URL/UTM generation.
-- **Integration:** Prisma queries against a disposable test Supabase project, RBAC/entitlement checks, transactions, Redis/queue adapters, provider boundaries; for SMAE — OAuth callback, token refresh, platform adapter calls, webhook signature verification, n8n API contract, database uniqueness constraints, outbox delivery.
+- **Integration (target):** Prisma queries against disposable PostgreSQL/Supabase, RBAC/entitlement checks, transactions, Redis/queue adapters, provider boundaries; for SMAE — OAuth callback, token refresh, platform adapter calls, webhook signature verification, n8n API contract, database uniqueness constraints, outbox delivery.
 - **API:** status codes, validation, auth, RBAC, entitlements, pagination, idempotency, the standard error envelope.
 - **E2E:** registration, catalog browsing, cart, checkout, order tracking, vendor isolation, admin workflows, critical public pages; for SMAE — `product published → event → n8n → eligibility → AI → moderation → approval → schedule → provider → status → analytics`.
 - **Frontend:** loading/error/empty states, forms, route protection, responsive behavior, accessibility, structured metadata.
-- **Smoke:** health, Swagger, migration status, seed, public feed endpoints, Storage bucket reachability, production build output.
+- **Smoke (target):** Swagger, migration status, catalog routes, Storage bucket reachability, production build output. There is no health route, seed script, or public-feed endpoint in the current implementation.
 - **Failure tests (SMAE, explicit per `06` §48):** duplicate events, duplicate workflows, duplicate publish after timeout, expired token, revoked permission, provider 429/5xx, invalid media, product deletion mid-flow, out-of-stock at publish time, price change mid-flow, subscription expiry mid-flow, n8n outage, duplicate webhook delivery, provider reconciliation mismatch.
 
 ### 12.3 Definition of done
@@ -1125,101 +1202,51 @@ A feature is not complete until its code, schema (including any required RLS pol
 
 ## 13. Deployment and operations
 
-### 13.1 Vercel storefront (single canonical configuration)
+### 13.1 Current deployment status
 
-```json
-{
-  "framework": "nextjs",
-  "installCommand": "npm ci",
-  "buildCommand": "npm run build:web",
-  "outputDirectory": "apps/web/.next"
-}
-```
+No deployment provider/configuration is established in the current repository.
+There is no `vercel.json`, API Dockerfile, Docker Compose file, or checked-in
+GitHub Actions workflow. The Next.js app can be built with `npm run build`;
+the API can be built with `npm run build:api`. Neither command proves that
+either service is deployed. Hosted database migration and production
+environment status remain unverified.
 
-Root Directory: repository root. This is the only supported configuration. Set Preview/Production variables: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL` (ending in `/api/v1`), `NEXT_PUBLIC_APP_NAME`. After deployment, verify homepage, product page, search, auth entry points, and API connectivity.
+### 13.2 Deployment requirements when deployment is introduced
 
-### 13.2 API and n8n deployment
+Choose and document a host for the root Next.js application and the NestJS API.
+Configure the API's current required environment variables from `.env.example`
+using the host's secret manager. Do not configure future JWT, Redis, n8n,
+Storage-upload, payment, or OAuth values as though those features were active.
+Keep storefront-to-API traffic on the API boundary; never expose database
+credentials to the browser.
 
-**The API deploys as a long-running Node process (`apps/api/Dockerfile`) on a host that supports it — e.g. Railway, Render, Fly.io, or a managed VPS/cluster.** This is the canonical production path, chosen because the platform relies on background workers (outbox dispatch, social automation, feed generation, notifications) that don't fit a request-scoped serverless model, and to avoid exhausting the Supabase connection pooler with cold-start connections. Build the Dockerfile to remain Kubernetes-compatible (`05` states "Kubernetes Ready") so a later migration to a cluster doesn't require a rewrite — start on a simpler single-container host for MVP, don't provision Kubernetes before there's a scaling reason to.
+Before applying a migration, review the Prisma and matching Supabase SQL
+diffs, verify the exact target project, and use a recoverable rollout plan.
+Do not apply migrations to a shared or production project as part of local
+development or documentation validation.
 
-Vercel's NestJS-as-a-Fluid-compute-function option may be used for a **staging smoke-test deployment only**, never production, since it has no facility for the background workers above.
+### 13.3 Release checklist (target procedure)
 
-**n8n hosting: n8n Cloud** (§0.1 default) for each environment (dev/staging/production workspaces, never a shared workspace across environments). `N8N_BASE_URL`, `N8N_WEBHOOK_SIGNING_SECRET`, and `N8N_SERVICE_API_KEY` are environment-specific (§4.2) and workflows are exported to `workflows/n8n/` on every change (§2) regardless of hosting choice — this is what keeps a future self-host migration mechanical rather than a rewrite, should automation volume or data-residency needs justify it later.
-
-Configure on the API host: `DATABASE_URL` (pooled, `connection_limit` tuned to host concurrency), `DIRECT_URL` (migration step only), `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/both storage bucket names, `UPSTASH_REDIS_URL`/`TOKEN`, `N8N_*` vars, `APP_URL`/`API_URL`/`CORS_ORIGIN`, `API_PORT`, `JWT_*`, `SOCIAL_ENCRYPTION_KEY`, per-platform OAuth app credentials (phased per §9.8.7 — don't provision TikTok/Pinterest/X credentials before Phase 3), `EMAIL_PROVIDER_API_KEY`, payment provider credentials.
-
-Release order:
-
-```bash
-npm ci
-npm run db:migrate:deploy    # against DIRECT_URL — run from CI, not the app host, §13.5
-npm run build --workspace=@imtiaz-mart/api
-npm run start:prod --workspace=@imtiaz-mart/api
-```
-
-Do not run demo seed data against production (§3.5's automated guard enforces this).
-
-### 13.3 Release checklist
-
-1. Review source and migration diff (both `prisma/migrations` and `supabase/migrations`).
-2. Confirm environment variables and secret rotation for the target Supabase project **and** target n8n environment (§4.2).
-3. Run `npm ci` and all builds in a clean environment (CI does this automatically).
-4. Apply migrations (`db:migrate:deploy` + `supabase db push`) before code paths requiring new fields are enabled.
-5. Deploy API and verify health/Swagger/authenticated smoke tests, including a social-automation smoke test if SMAE is live (webhook signature check, one end-to-end dry-run event).
-6. Deploy storefront and verify API URL/CORS behavior.
-7. Check logs, error rates, queue/dead-letter status, `SocialWorkflowRuns` failures, payment/webhook status, and feed freshness.
-8. Keep the previous application version available until smoke tests pass.
+1. Run the root build, lint, API tests, schema validation, and migration-contract tests.
+2. Review both migration histories and verify the target database/project.
+3. Apply only reviewed migrations to the intended environment.
+4. Deploy the API and web app using their actual package scripts and the selected host's documented process.
+5. Smoke-test the homepage, `/api/docs`, and each implemented catalog route.
+6. Verify request errors, CORS behavior, logs, and database connectivity without exposing secrets.
+7. Keep rollback or forward-fix steps available before serving production traffic.
 
 ### 13.4 Backups and observability
 
-Confirm the current Supabase plan tier's backup/PITR window and run a restore drill before launch. Define Upstash Redis durability expectations (most caches/queues are acceptable-loss; confirm nothing production-critical lives only in Redis without a durable fallback). Per `05_DEVELOPMENT_STANDARDS.md`, the target observability stack is Sentry (error monitoring), Grafana + Prometheus (metrics), Cloudflare CDN, and automated backups — confirm adoption and ownership of each before treating it as active infrastructure. SMAE-specific observability metrics to track (per `06` §46): `automation_events_received`, `content_jobs_created`, `content_generation_success/failure`, `moderation_pass/block`, `approval_wait_time`, `posts_scheduled/published`, `publish_failures/retries`, `provider_429/5xx`, `token_expiry`, `reauth_required`, `webhook_failures`, `analytics_failures`, `dlq_count` — segmented by platform, vendor, workflow, environment, and error class.
+Backups, restore drills, monitoring, CDN, Redis durability, and the
+SMAE-specific metrics in `05`/`06` are requirements to establish before launch;
+they are not configured or verified in this repository.
 
 ### 13.5 CI/CD
 
-`.github/workflows/ci.yml` runs on every pull request and on merge to `main`:
-
-```yaml
-name: CI
-on:
-  pull_request:
-  push:
-    branches: [main]
-jobs:
-  build-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run generate --workspace=@imtiaz-mart/database
-      - run: npm run build
-      - run: npm run lint
-      - run: npm run test
-  migrate-deploy:
-    needs: build-test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run db:migrate:deploy
-        env:
-          DIRECT_URL: ${{ secrets.PRODUCTION_DIRECT_URL }}
-      - uses: supabase/setup-cli@v1
-      - run: supabase db push --linked
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-```
-
-`migrate-deploy` runs before the hosting provider's own Git-triggered redeploy, satisfying §13.3's release order. Extend with an n8n workflow-import step once the n8n hosting decision (§0.1) is finalized, so `workflows/n8n/` is the deployed source of truth, not a point-in-time export.
+There is no checked-in CI/CD workflow. When adding one, use only existing
+commands from §16.1 and keep deployment/migration steps gated on explicit
+environment configuration and review. Do not document an example workflow as
+active until it exists and has passed on the repository's branch.
 
 ---
 
@@ -1228,19 +1255,18 @@ jobs:
 ### Prisma client cannot be found
 
 ```bash
-npm run generate --workspace=@imtiaz-mart/database
-npm run build --workspace=@imtiaz-mart/database
+npm run db:generate
 ```
 
-Confirm `prisma` is in `packages/database.dependencies`, not only `devDependencies`, and `package-lock.json` is committed.
+Confirm dependencies are installed from the root lockfile, then regenerate the Prisma client.
 
 ### Migrations succeed locally but fail in CI/production
 
-Pooler-vs-direct mismatch. Confirm `migrate deploy` and `supabase db push` both use `DIRECT_URL` (port `5432`), never `DATABASE_URL` (port `6543`) — the transaction pooler doesn't support the prepared statements and advisory locks Prisma Migrate relies on.
+Review the Prisma migration connection (`DIRECT_URL`) and the destination linked in the Supabase CLI separately. There is no current CI migration job; never assume a deployment uses the intended project.
 
 ### API cannot connect to the database
 
-Check `DATABASE_URL` includes `?pgbouncer=true` (and `connection_limit=1` if short-lived), confirm the Supabase project isn't paused (free-tier projects pause after inactivity), confirm migration status, confirm the API loads the intended `.env` for the intended project ref.
+Check that `DATABASE_URL` is valid for the configured PostgreSQL service, review migration status, and confirm the API loaded the intended `.env`. The API currently checks only that `DATABASE_URL` is present at startup.
 
 ### "Too many connections" under load
 
@@ -1254,13 +1280,11 @@ Confirm the `tsvector`/`GIN` index exists on searched columns. Elasticsearch is 
 
 Set `CORS_ORIGIN` to the exact storefront origin(s), protocol included. Restart the API after changing environment variables.
 
-### Seed fails
+### Product images don't appear
 
-Verify migrations are applied, `ALLOW_SEED` is set and the target project isn't production (§3.5), generated Prisma client is current, and the seed isn't running concurrently.
-
-### Uploaded images don't appear / upload fails
-
-Confirm the correct bucket name (`SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` vs. `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS` — these are separate buckets, §9.9/§9.8.5), the service-role key has Storage write access, and public-read policy is applied. Local-disk upload paths are a regression to remove, not a fallback.
+The current catalog API composes public bucket URLs but does not create buckets
+or upload images. Verify the `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` value and
+manually provision the public bucket in the intended development project.
 
 ### Anon-key access to a table unexpectedly succeeds
 
@@ -1298,7 +1322,7 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 - [ ] Match the §7.7 page-by-page build spec for this page type, not a simplified stand-in.
 - [ ] Verify accessibility per §7.6 for every component type on the page.
 - [ ] Verify layout at `sm`/`md`/`lg`/`xl` (§7.3) and in dark mode — not desktop-light-mode only.
-- [ ] Avoid exposing secrets or trusting client totals/permissions; confirm no `supabase-js` or Supabase key ever reaches `apps/web`.
+- [ ] Avoid exposing secrets or trusting client totals/permissions; confirm no `supabase-js` or Supabase key ever reaches the web app.
 - [ ] Test API failure and mobile layouts.
 
 ### 15.3 Database feature
@@ -1308,9 +1332,9 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 - [ ] Add the matching RLS default-deny policy in `supabase/migrations/` in the same PR (§8.6).
 - [ ] Plan nullability, backfill, indexes, retention, and rollback.
 - [ ] Use transactions for coupled commerce mutations, including outbox writes (§9.8.2).
-- [ ] Update seed data only for safe local/test fixtures.
-- [ ] Generate and compile the database package.
-- [ ] Confirm CI's `migrate-deploy` job runs both the Prisma migration and the Supabase CLI push.
+- [ ] Update seed data only for safe local/test fixtures (no application seed script currently exists).
+- [ ] Run `npm run db:validate`, `npm run db:generate`, and database contract tests.
+- [ ] Add/verify CI migration checks if a CI workflow is introduced; none exists currently.
 
 ### 15.4 External / SMAE integration
 
@@ -1326,11 +1350,11 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 
 ### 15.5 Deployment
 
-- [ ] Run clean install and production builds (CI does this automatically).
+- [ ] Run a clean install and the applicable production builds.
 - [ ] Validate environment variables and secret sources for the target Supabase project and n8n environment (§4.2).
-- [ ] Apply migrations safely via CI (§13.5), never manually against production.
-- [ ] Confirm the single canonical Vercel config (§13.1) and single canonical API/n8n host config (§13.2) are unchanged or intentionally updated here.
-- [ ] Run post-deploy health, auth, catalog, checkout, and API smoke checks, plus a social-automation dry run if SMAE is live.
+- [ ] Apply migrations only through the target environment's reviewed deployment procedure; no CI migration job exists currently.
+- [ ] Record the selected web/API host configuration; none is currently checked in.
+- [ ] Run smoke checks for implemented routes; health, auth, checkout, and social automation are not current endpoints.
 - [ ] Inspect logs, errors, queues, payments, webhooks, and feed freshness.
 
 ---
@@ -1341,16 +1365,18 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 
 | Command | Purpose |
 | --- | --- |
-| `npm ci` | Reproducible dependency install. |
-| `npm run dev:web` / `npm run dev:api` | Start dev servers. |
-| `npm run build:web` / `npm run build:api` / `npm run build` | Build for production. |
-| `npm run lint` / `npm run test` | Lint / test workspace scripts. |
-| `npm run db:migrate` / `db:migrate:deploy` / `db:migrate:status` | Prisma migrations (create+apply / deploy / status) — all against `DIRECT_URL`. |
-| `npm run db:generate` | Generate Prisma client from root. |
-| `npm run db:seed` | Seed local/test data (guarded, §3.5). |
-| `npm run db:bootstrap:supabase` | Create Storage buckets and apply RLS policies idempotently for a freshly linked project. |
-| `supabase link --project-ref <ref>` | Link the local checkout to a hosted Supabase project. |
-| `supabase db push` | Apply `supabase/migrations/` SQL (extensions, RLS, storage) to the linked project. |
+| `npm ci` | Install dependencies from the root lockfile. |
+| `npm run dev` | Start the root Next.js app. |
+| `npm run dev:api` | Start the NestJS API workspace in development. |
+| `npm run build` / `npm run build:api` | Build the Next.js app / API. |
+| `npm run start` | Start the built Next.js app. |
+| `npm run lint` | Run ESLint from the root. |
+| `npm run test:api` / `npm run db:test` | Run API tests / database migration-contract tests. |
+| `npm run db:validate` | Validate the Prisma schema. |
+| `npm run db:generate` | Generate Prisma Client. |
+| `npm run db:migrate:deploy` | Deploy existing Prisma migrations; verify the destination before use. |
+| `supabase link --project-ref <ref>` | Supabase CLI command; link only the intended project. |
+| `supabase db push` | Supabase CLI command; apply raw SQL to the currently linked project after verifying the link and changes. |
 
 ### 16.2 Specialist specifications
 
@@ -1361,7 +1387,7 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 - [Development standards](./05_DEVELOPMENT_STANDARDS.md) — Clean Architecture/DDD/SOLID, testing/coverage target, DevOps stack, and the Cursor operating rule reproduced at the top of this handbook.
 - [Social media automation engine](./06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md) — the SMAE master spec; §9.8 above is a summary, not a substitute.
 - [AI agent commerce and visual search](./07_AI_AGENT_COMMERCE_READINESS.md) — UCP/ACP/Perplexity/MCP and visual search; §9.6–9.7 above are a summary.
-- ~~Database setup notes (`SETUP_DATABASE.md`)~~ — **superseded and retired, §0.3.** Its Supabase pooler/direct-URL guidance is fully absorbed into §3–§4 above. Delete the file from the repository (or leave a one-line pointer to this handbook in its place) and remove its row from `README.md`'s document table.
+- [Database setup pointer](./SETUP_DATABASE.md) — superseded by this handbook for setup and migration guidance.
 
 ### 16.3 Glossary
 
@@ -1384,9 +1410,9 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 ### 16.4 Known gaps to maintain
 
 - n8n hosting, email provider, and Kubernetes timing are resolved defaults (§0.1) — build against them. The escrow/payout model (§0.2) is build-ready but its production release-of-funds job must stay behind a flag until finance/legal sign-off is obtained; track that sign-off as a release-blocking task, not an engineering one.
-- Audit every existing table for an RLS default-deny policy, including the full revised SMAE model (§8.1.1).
-- Confirm no local-disk upload code path remains for either storage bucket.
-- Confirm UUID v7 is the actual ID generation strategy, not a generic default.
+- The existing catalog migration set enables default-deny RLS for current catalog tables; review each future table independently. The target SMAE tables (§8.1.1) do not exist yet.
+- No upload route or local-disk upload path is implemented. When storage uploads are added, keep them out of ephemeral local disk.
+- UUID v7 is the current catalog ID strategy; preserve it when extending the schema.
 - Build the `PlatformCapability` registry before any platform adapter ships (§9.8.1).
 - Verify complete test coverage and add missing integration/E2E suites, including the SMAE failure-test list (§12.2).
 - Complete and validate provider payment reconciliation and webhooks, including agent-originated order disputes.
@@ -1397,6 +1423,6 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 - Confirm ownership, retention, backup, and incident-response policies for all operational data, including the Supabase plan tier's actual backup/PITR coverage.
 - Implement malware scanning on vendor uploads.
 - Pilot the MCP server (§9.6.4) before committing to full UCP/ACP integration work.
-- Finalize the staging hosting target and extend the CI workflow (§13.5), including n8n workflow import once hosting is decided.
+- Select a staging/production hosting target and add CI/CD workflows when those operational environments are established (§13.5).
 
 Documentation is part of the system. Update this handbook when a command, deployment model, module boundary, workflow, security control, or feature status changes.
