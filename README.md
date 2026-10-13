@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ATVOO
 
-## Getting Started
+ATVOO is a multi-vendor commerce platform for the Pakistan market, with English and PKR as the launch defaults. Product, vendor, inventory, price, and policy facts must come from the authoritative application data layer; the storefront must not ship invented catalog records.
 
-First, run the development server:
+## Source Of Truth
+
+Read [the Developer Handbook](PROJECT%20DOCUMENTATIONS/00_DEVELOPER_HANDBOOK.md) first. It governs setup, operations, and the source-of-truth hierarchy. The numbered documents define product, data, UI, API, business, and operations requirements; when they conflict, record the discrepancy and follow the hierarchy in the handbook. The current source tree defines what is implemented today, not what the documentation says should already exist.
+
+Before work in a feature area, read the handbook and the relevant numbered specifications. For broad platform work, read specifications `01`–`09` in the order required by `05_DEVELOPMENT_STANDARDS.md`. Social automation has its own mandatory sequence in `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md` §51.
+
+## Phased Delivery
+
+Each phase has a written scope, a focused validation gate, and a documented result. Do not start the next phase until the current phase's gate passes. External credentials, legal/finance approvals, and production services remain prerequisites; features depending on them stay disabled until verified.
+
+| Phase | Scope | Gate |
+| --- | --- | --- |
+| 1. Storefront foundation | Brand shell, accessible responsive homepage, documented design tokens, metadata | Production build, lint, server-rendered HTML and responsive review |
+| 2. Catalog and discovery | Catalog data contract, categories, product pages, search, filters, JSON-LD, sitemap and crawler surfaces | API/data contract tests, no-JS SEO checks, build and accessibility checks |
+| 3. Cart and order lifecycle | Guest cart, checkout quote, reservations, single buyer order with vendor shipments, tracking | Domain/state-machine tests and checkout E2E with provider sandboxes |
+| 4. Customer and vendor operations | Authentication, accounts, vendor onboarding, catalog/inventory and fulfilment portals | RBAC/ownership tests, workflow integration and E2E checks |
+| 5. Administration and operations | Admin workflows, CMS, finance/escrow, returns, support, audit and settings | Permission/audit tests; payout release remains flagged pending sign-off |
+| 6. Launch capabilities | Notifications, loyalty, affiliates, analytics/consent, visual search, discoverability feeds, MCP and social automation | Provider/contract/security tests and feature-flag verification |
+| 7. Launch readiness | Security, accessibility, performance, backups, runbooks, monitoring and go-live checklist | Handbook §12 and `09_LAUNCH_READINESS_AND_OPERATIONS.md` go-live gates |
+
+**Current phase:** Phase 2 — Catalog and discovery. Phase 1 passed build, lint, server-rendered HTML, image delivery, and responsive-style checks. Phase 2 starts by establishing the documented API/database catalog foundation; the current starter repository does not contain those workspaces yet. Later-phase functionality must not be presented as live until its data source, routes, and validation gates exist.
+
+## Development
+
+Requirements: Node.js 20 LTS or newer and npm.
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The storefront runs at `http://localhost:3000`. Before completing a phase, run the narrowest applicable check and then the required project gates:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The complete production setup, environment variables, architecture, testing, security, and deployment procedures are documented in the [Developer Handbook](PROJECT%20DOCUMENTATIONS/00_DEVELOPER_HANDBOOK.md).
