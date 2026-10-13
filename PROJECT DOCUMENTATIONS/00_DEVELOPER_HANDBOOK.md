@@ -1,93 +1,75 @@
-# ATVOO Developer Handbook (v4 — Build-Ready Edition)
+# ATVOO Developer Handbook (v5 — Cursor-Ready, Launch-Complete Edition)
 
 **Project:** ATVOO ("AI-Based Most Modern Shopping Store")
 **Repository:** `imtiaz_mart`
 **Audience:** Developers, technical leads, QA engineers, DevOps engineers, and AI coding agents (including Cursor)
-**Document status:** Source of truth for architecture, infrastructure, process, and UI/UX implementation
-**Supersedes:** v3 (Supabase + n8n edition); all prior versions are historical only
-**Last verified:** 2026-09-22
+**Document status:** Operational source of truth for architecture, infrastructure, process, build order and launch
+**Supersedes:** v4; all prior versions are historical only
+**Last verified:** 2026-10-13 (protocol/provider facts re-verified against public docs on this date)
 
-This is the primary onboarding and operating guide for the ATVOO monorepo. It explains how the system is organized, how to run it, how to change it safely, and how to deploy it. The numbered specification documents in `docs/` remain the domain specifications — they describe product intent and target architecture. This handbook records the relationship between those requirements and the code, and is the operational source of truth for infrastructure, environment, and process.
+This is the primary onboarding and operating guide for the ATVOO monorepo. It explains how the system is organised, how to run it, how to change it, in what order to build it, and how to deploy and launch it. The numbered specifications (`01`–`09`) are the domain specifications; **together with this handbook they are a complete set — Cursor should be able to build the whole platform without asking product, architecture or infrastructure questions.** Where something genuinely needs an outside decision, it is listed in the sign-off register (§0.1) and is built behind a flag, never blocked on.
 
-## Cursor / AI-agent operating rule (binding)
+## Document set and Cursor operating rule (binding)
 
-Per `05_DEVELOPMENT_STANDARDS.md`, before generating code for any feature, read this handbook **and**:
-
-```text
-01_PROJECT_MASTER_SPECIFICATION.md
-02_DATABASE_ARCHITECTURE.md
-03_UI_UX_DESIGN_SYSTEM.md
-04_API_ARCHITECTURE.md
-05_DEVELOPMENT_STANDARDS.md
-06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md
-07_AI_AGENT_COMMERCE_READINESS.md
-```
-
-**Never make an architectural assumption that conflicts with the specifications.** Where this handbook summarizes a specification for operational convenience (most heavily in §9.6 and §9.8, which summarize `07` and `06` respectively), the numbered specification is authoritative for the details; this handbook is authoritative for how that detail maps onto infrastructure, commands, and environments. If the two genuinely disagree, stop and record the discrepancy (§ Source-of-truth hierarchy) rather than picking one silently. Generate production-ready, enterprise-grade code only — no placeholder logic presented as complete.
-
-## 0. What changed in this revision (read this first)
-
-v2 adapted the project to Supabase without having seen the numbered specifications. Having now read all seven, three corrections matter enough to call out before anything else:
-
-1. **Social automation is not a minor opt-in feature — it is a full event-driven subsystem** with its own orchestration engine (n8n), transactional outbox, capability registry, approval state machine, and dead-letter handling. §9.8 and §2 now reflect this; treat `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md` as required reading before touching any social/marketing module, not as background context.
-2. **RBAC permissions and subscription entitlements are two different authorization axes.** A vendor user can have the `social:write` permission and still be blocked by the `social.automation.enabled` entitlement if their plan doesn't include it. Previous revisions of this handbook only modeled permissions. See §1.2.
-3. **AI Agent Commerce (UCP/ACP/Perplexity) is a named, dated, protocol-specific integration**, not a vague future capability. §9.6 is rewritten around the actual protocols and a recommended low-risk MCP pilot.
-
-Everything from v2 regarding Supabase as the managed Postgres provider, RLS default-deny, Supabase Storage for uploads, and the canonical deployment paths remains in force and is **independently corroborated** by `SETUP_DATABASE.md` and `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md` (both explicitly name Supabase PostgreSQL as the database). Those sections are carried forward with minor corrections (UUID v7, not generic UUID; n8n added to the architecture diagram).
-
-v4 closes out every remaining item that would otherwise require a clarifying question mid-build: the three cross-document faults surfaced by reading all specs together (§0.3), and a complete, opinionated UI/UX implementation system (§7) so screens don't stall on undefined tokens, states, or breakpoints. See §0.4 for the standing confirmation that this document is build-ready.
-
-### 0.3 Cross-document faults, resolved here
-
-Reading `01`–`07` together surfaced three places where the specifications disagree with each other or leave a gap this handbook must close before Cursor can build without stopping to ask. Each is resolved as **binding** below; the underlying spec files are unedited, so treat this section as the authoritative reconciliation per the source-of-truth hierarchy's instruction to "record the discrepancy" rather than pick a side silently.
-
-**Fault 1 — `02_DATABASE_ARCHITECTURE.md`'s social-automation table list is stale.** `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md` §27 states explicitly that `02`'s original list (`VendorSocialAccounts, SocialAutomationRules, SocialPostQueue, SocialPostTemplates...`) "is not sufficient for the target system" and supplies a replacement. `02` was never updated to match. **Binding resolution: §8.1.1 of this handbook is the authoritative social-automation schema. Do not implement `02`'s original social-automation list.** If anyone edits `02_DATABASE_ARCHITECTURE.md` directly, replace its Social Media Automation Module section with §8.1.1's list or a pointer to it, so the two documents stop disagreeing.
-
-**Fault 2 — the "single Order, vendor sub-orders underneath" model was only ever prose.** `01`'s market-weakness table promises this as a named differentiator; `02`'s Order Management entities (`Orders, OrderItems, OrderStatusHistory, Shipments, Returns, Refunds, Invoices`) never say how a sub-order is actually represented. **Binding resolution:** a vendor sub-order is **not** a separate top-level entity. It is the set of `OrderItems` on a single `Order` sharing the same `vendorId`, each vendor's subset gets exactly one `Shipment` (so `Shipments.vendorId` is a required, indexed column), and `OrderStatusHistory` is recorded per `Shipment` for vendor-controllable states (packed, shipped, delivered) and per `Order` for buyer-facing states (placed, paid, cancelled, completed). The customer-facing API and UI always aggregate up to the single `Order`; a vendor-facing API/UI filters down to that vendor's `Shipment` and its `OrderItems`. Do not create an `OrderSubOrder` or `VendorOrder` table — this would duplicate data `OrderItems.vendorId` and `Shipments.vendorId` already express.
-
-**Fault 3 — `04_API_ARCHITECTURE.md` has no endpoints for the escrow/payout flow this handbook defines in §0.2.** That flow didn't exist when `04` was written. **Binding resolution — the following endpoints are added to the Admin API group (§6.3) and must be implemented alongside the escrow schema, not deferred:**
+Read in this order before generating code (`05_DEVELOPMENT_STANDARDS.md` "Cursor rule"):
 
 ```text
-GET   /admin/payouts/escrow                 list EscrowHoldings, filterable by status/vendor/date
-POST  /admin/payouts/escrow/:id/release     manual release (support-resolved dispute, no-shipment digital goods)
-POST  /admin/payouts/escrow/:id/reverse     manual reversal (refund/chargeback before scheduled release)
-GET   /admin/payouts/batches                list VendorPayout batch runs
-POST  /admin/payouts/batches/run            trigger a payout batch (gated behind the finance/legal sign-off flag, §0.2)
-GET   /vendor/payouts/escrow                vendor-scoped read-only view of their own held/released escrow
+00_DEVELOPER_HANDBOOK.md                (this file: setup, environments, build plan, process)
+01_PROJECT_MASTER_SPECIFICATION.md      (vision, scope, launch tiers, metrics)
+02_DATABASE_ARCHITECTURE.md             (models, conventions, RLS, sub-orders)
+03_UI_UX_DESIGN_SYSTEM.md               (tokens, scales, components, every screen)
+04_API_ARCHITECTURE.md                  (contracts, endpoint inventory, UCP/MCP, internal APIs)
+05_DEVELOPMENT_STANDARDS.md             (code, testing, CI gates, security, git)
+06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md    (SMAE + Implementation Addendum)
+07_AI_AGENT_COMMERCE_READINESS.md       (LLM discoverability, protocols, visual search)
+08_BUSINESS_RULES_AND_DOMAIN_FLOWS.md   (resolved business rules and settings)
+09_LAUNCH_READINESS_AND_OPERATIONS.md   (approvals, topology, SLOs, DR, go-live gate)
 ```
 
-**Also resolved, not deferred:** `SETUP_DATABASE.md` is **superseded by this handbook (§3–§4) and retired**. Its content is fully absorbed here; do not maintain it as a second source of Supabase setup instructions. Delete it from the repository, or if it must remain for a transitional period, replace its body with a single line pointing to this handbook and remove its row from `README.md`'s document table.
+Rules for the agent: (1) never make an architectural assumption that conflicts with a specification; (2) where a spec is silent, apply the resolved default in `08`/this handbook; if still silent, choose the most conservative secure option, record an ADR (`docs/adr/`) and a line in `docs/ASSUMPTIONS.md`, and **continue** — do not stop the build for questions a document already answers; (3) follow the build plan (§17) in order; (4) anything marked **[SIGN-OFF]** is built behind a setting/feature flag that defaults OFF; (5) ship production-quality code only — no mock data on production paths, no stubs presented as complete, every feature with tests, loading/empty/error states, audit and observability hooks; (6) update this handbook/specs in the same PR when behaviour changes.
 
-### 0.4 Definition of ready (standing confirmation)
+## 0. Revision summary (v5)
 
-This handbook is build-ready: every technical decision has a resolved default (§0.1), the payout/escrow flow is schema- and API-complete pending only a finance/legal flag (§0.2), the three cross-document contradictions are reconciled (§0.3), and the UI/UX system in §7 specifies tokens, states, breakpoints, and component behavior completely enough that no screen should require an undocumented judgment call. If Cursor (or a developer) hits a genuine ambiguity this document doesn't cover, that is itself a defect in this handbook — fix the handbook in the same PR as the code, per §15, rather than resolving it silently in one place only.
+v4 was reviewed against the question "can this be deployed once and go live?" and found incomplete in these areas, all now closed:
 
-## How to use this handbook
+1. **LLM/search discoverability was under-specified and partly wrong.** Verified facts (Oct 2026): UCP discovery is `/.well-known/ucp` (not `commerce-manifest.json`); the OpenAI product feed is **pushed** by the merchant to an allow-listed endpoint (not pulled from `/feeds/acp`) and requires an approved application and `OAI-SearchBot` access; OpenAI is moving to discovery + merchant-owned checkout, so **agentic checkout is not a launch item**; AI crawlers are separate bots for training vs. search vs. user-fetch. `07` was rewritten (robots policy, SSR/no-JS rule, JSON-LD, sitemaps/IndexNow, `llms.txt`, markdown twins, Google/Bing/OpenAI/Perplexity feeds, MCP server, prompt-panel monitoring). See §9.6.
+2. **Business rules were missing** (COD, shipping, tax, KYC, returns, commissions, coupons, loyalty, reviews, fraud, notifications, settings). New `08` resolves them with configurable defaults.
+3. **Launch/operations were missing** (approvals with lead times, topology incl. worker/scheduler processes, Supabase Pro/PITR/backups, security & load gates, SLOs, runbooks, DR, go-live gate). New `09`.
+4. **Social automation lacked a concrete "fully automatic" definition and provider-approval fallback.** `06` Implementation Addendum adds autonomy modes, launch limits, signing, retries, AI/n8n operations.
+5. **UI/UX source of truth was split.** Tokens, scales, states and all screens now live in `03`; handbook §7 keeps only implementation rules.
+6. **Specs 01–05 and 07 were rewritten** (clean markdown, launch scope, contracts, missing endpoints/tables), `README` updated, `SETUP_DATABASE.md` retired. No "handbook overrides spec" exceptions remain.
 
-Read the sections in order when joining the project. For a feature change, start with the relevant domain specification, inspect the owning module and schema, then follow the change checklist in §15.
+Carried forward unchanged: Supabase as managed Postgres (RLS default-deny, Storage), Upstash Redis, n8n Cloud, single canonical Vercel/API deployment paths, resolved escrow default (§0.2).
 
-Status labels used throughout:
+### 0.1 Decisions (all resolved) and the sign-off register
 
-| Label | Meaning |
-| --- | --- |
-| **Implemented** | Present in the repository and usable in the documented environment. |
-| **Partial** | Some code exists, but important production behavior or integration work remains. |
-| **Planned** | Described by the specifications but not yet implemented or not verified in code. |
-| **Prerequisite** | Requires external infrastructure, credentials, provider approval, or an operational decision. |
-| **Needs confirmation** | Documentation and implementation disagree or the behavior requires an explicit product decision. |
-| **Open decision** | Requires a business/legal/finance call this handbook cannot make on its own. See §0.1. |
+| Decision | Resolution |
+|---|---|
+| n8n hosting | **n8n Cloud**, one workspace per environment; workflows exported to `workflows/n8n/`; self-host later if cost/residency require. |
+| Transactional email | **Resend** behind a provider interface (`modules/notifications/email`). |
+| API hosting / Kubernetes | Container on a long-running host (Railway/Render/Fly.io) with **separate `api`, `worker`, `scheduler` processes**; image stays Kubernetes-compatible; cluster only on a scale trigger. |
+| Primary market / currency / language | Pakistan, PKR (integer minor units), English at launch, i18n-ready, Urdu/RTL Phase 2 — all as settings (`08 §0`). Change by settings, never code. |
+| Payment methods | Card (hosted fields), COD, JazzCash, Easypaisa; wallet/points/gift cards. Provider selection is **[SIGN-OFF]** (entity/country availability) behind a `PaymentProvider` interface. |
+| Shipping at launch | Vendor-fulfilled with vendor shipping profiles + manual carrier/tracking entry; carrier API adapters Phase 1.5 (`08 §9`). |
+| Embeddings (visual/semantic search) | Hosted multimodal embedding API behind `EmbeddingProvider`; model/version stored per row; pgvector HNSW (`07 Part 3`). |
+| AI generation | Provider-agnostic `AiProvider`, versioned prompts, cost budgets, kill switches (`06 A6`). |
+| Social autonomy default | `APPROVAL_REQUIRED` for vendors; `FULLY_AUTOMATIC` only under the gates in `06 A1`; Mode B curated content may be automatic at launch. |
+| LLM crawler policy | Allow search/citation/user-fetch bots; training bots disallowed by default; admin-togglable (`07 §1.4`). |
+| Agentic checkout (UCP/ACP) | Planned (Phase 2), flag OFF | Not a launch item; settles against the §0.2 escrow flow when enabled. |
+| Escrow / payout model | Default in §0.2; release job behind a flag. |
 
-### 0.1 Decisions (resolved defaults, and what still needs real sign-off)
+**Sign-off register — built now, enabled only after the named owner approves (each is a feature flag/setting defaulting OFF):**
 
-Four of the five decisions this handbook previously left open have a defensible default and are resolved below so Cursor isn't blocked. One is a genuine financial/legal commitment that a document cannot make — it gets a concrete recommended model instead, explicitly gated on sign-off before it is enabled with real money.
-
-| Decision | Resolution | Status |
-| --- | --- | --- |
-| n8n hosting | **n8n Cloud** for MVP — faster to start, provider handles patching/upgrades, avoids a second piece of infrastructure to operate before automation volume justifies it. Self-host (Docker, alongside the API host) remains a documented fallback if cost or data-residency requirements change later; the workflow-export discipline in §2/§9.8.3 makes that migration mechanical, not a rewrite. | **Resolved (default)** — revisit if per-execution cost or data residency becomes a constraint |
-| Transactional email provider | **Resend.** Chosen for a straightforward API, good deliverability reputation, and a template model that fits password reset, order confirmation, and vendor approval emails without extra infrastructure. Implemented behind a thin provider interface (`apps/api/src/modules/notifications/email/`) so swapping providers later is a one-file change, not a rewrite. | **Resolved (default)** |
-| Kubernetes vs. single-container host | **Single-container host now** (Railway/Render/Fly.io per §13.2), Dockerfile kept Kubernetes-compatible. Revisit when a concrete scale trigger is hit — sustained load that a single instance/host's autoscaling can't absorb, a multi-region requirement, or a compliance requirement for isolated node pools. Provisioning a cluster before any of those exist adds operational cost with no corresponding benefit. | **Resolved (default)** |
-| Escrow / merchant-of-record model for vendor payouts | See §0.2 below — a concrete default flow is specified so the data model and API can be built now, but **enabling real payouts against it requires finance/legal sign-off**, not just engineering completion. | **Recommended default — sign-off required before production payouts** |
-| Agentic checkout payment rail ownership (ATVOO vs. vendor as merchant of record) | Follows directly from the escrow decision above — whoever is merchant of record for normal checkout is merchant of record for agentic checkout too, since ACP/UCP settlement rides on the same payout model. No separate decision needed once §0.2 is signed off. | **Tied to §0.2 — no independent action required** |
+| Item | Owner | Blocks | Flag / mechanism |
+|---|---|---|---|
+| Escrow release & vendor payouts with real money | Finance + Legal | Payout batches | `payouts.release_job_enabled` |
+| Tax treatment (sales tax/GST, withholding on payouts) | Accountant | Invoices/payout statements final format | `TaxRates` data + `tax.*` settings |
+| PSP / local acquirer / JazzCash / Easypaisa accounts | Finance | Live payments | Provider config present + `payments.<provider>.enabled` |
+| COD remittance procedure with couriers | Ops + Finance | COD escrow release | `cod.enabled`, `CarrierRemittances` |
+| Legal pages (Terms, Privacy, Seller Agreement, etc.) | Legal | Public launch | Pages marked DRAFT until published |
+| Prescription/regulated categories | Legal | Those categories | Category restricted flag |
+| SMS/WhatsApp aggregator & templates | Ops | COD OTP, WhatsApp notifications | `notifications.sms.enabled` |
+| Provider approvals (Meta, TikTok, Pinterest, X, GBP, OpenAI feed, Merchant Center) | Marketing/Social | Corresponding social/feed surface | `SocialPlatformApprovals`, `social.<p>.enabled`, `feeds.<p>.enabled` |
 
 ### 0.2 Recommended escrow / payout model (build-ready default, pending finance/legal sign-off)
 
@@ -112,9 +94,37 @@ This is an engineering-usable default, not a legal opinion — a payments lawyer
    negative adjustment against the vendor's next payout batch, never a silent balance edit.
 ```
 
-This same flow is what agentic checkout (§9.6.3) settles against — an ACP/UCP order captures payment the same way a normal checkout does, so no separate payment-rail decision is needed once this model is approved.
+This same flow is what agentic checkout (§9.6) settles against — an ACP/UCP order captures payment the same way a normal checkout does, so no separate payment-rail decision is needed once this model is approved.
 
 **What still requires explicit sign-off before this is enabled for real transactions:** the escrow hold period per category, whether ATVOO's payment processor agreements actually support holding funds this way (some processors have their own hold/release mechanics that should be used instead of a parallel one), and the money-transmission/regulatory implications of ATVOO holding funds at all in its operating jurisdiction(s). Build the schema and API now; gate the production release-of-funds cron/job behind a feature flag that only finance/legal turns on.
+
+### 0.3 Cross-document consistency (resolved)
+
+Reading `01`–`07` together previously surfaced contradictions; all are now fixed **in the specs themselves**:
+
+- `02` now carries the reconciled social-automation model (06 §27), the sub-order model (no `VendorOrders` table: `OrderItems` grouped by `vendorId`, one `Shipment` per `(order, vendor)`), and all platform/infrastructure tables.
+- `04` now contains the escrow/payout, shipping, tax, KYC, bulk-import, privacy, SEO/LLM, MCP, UCP and internal n8n endpoints, with the correct `/.well-known/ucp` path.
+- `06` carries an Implementation Addendum (autonomy modes, limits, signing, retries) and citation artifacts were removed.
+- `SETUP_DATABASE.md` is retired (stub points here); `README.md` lists the full set.
+
+### 0.4 Definition of ready (standing confirmation)
+
+Every technical decision has a resolved default (§0.1), sign-off items are built behind flags (§0.1, §0.2), the specification set is mutually consistent (§0.3), UI/UX is fully specified in `03`, and the launch path is defined in `09`. If Cursor or a developer hits a genuine ambiguity these documents do not cover, that is a documentation defect: fix the docs in the same PR (and log an ADR/assumption) rather than resolving it silently.
+
+## How to use this handbook
+
+Read the sections in order when joining the project. For a feature change, start with the relevant domain specification, inspect the owning module and schema, then follow the change checklist in §15.
+
+Status labels used throughout:
+
+| Label | Meaning |
+| --- | --- |
+| **Implemented** | Present in the repository and usable in the documented environment. |
+| **Partial** | Some code exists, but important production behavior or integration work remains. |
+| **Planned** | Described by the specifications but not yet implemented or not verified in code. |
+| **Prerequisite** | Requires external infrastructure, credentials, provider approval, or an operational decision. |
+| **Needs confirmation** | Documentation and implementation disagree or the behavior requires an explicit product decision. |
+| **Open decision** | Requires a business/legal/finance call this handbook cannot make on its own. See §0.1. |
 
 ## Source-of-truth hierarchy
 
@@ -123,7 +133,7 @@ When sources disagree, use this order and document the discrepancy rather than s
 1. **Runtime configuration and source code** define current application behavior.
 2. **`packages/database/prisma/schema.prisma`, migrations, and the live Supabase project schema** define persisted data behavior. If the deployed Supabase schema and the migration history disagree, treat this as an incident (§14), not a documentation problem.
 3. **This handbook** defines supported developer and operational procedures, and reconciles the specifications with the Supabase/n8n infrastructure decision.
-4. **The numbered specifications** (`01`–`07`) define intended product, data, and integration architecture. They outrank this handbook on domain modeling, API surface, design tokens, and the SMAE/AI-agent-commerce target architecture — this handbook must be updated to match them, not the reverse.
+4. **The numbered specifications** (`01`–`09`) define intended product, data, and integration architecture. They outrank this handbook on domain modeling, API surface, design tokens, and the SMAE/AI-agent-commerce target architecture — this handbook must be updated to match them, not the reverse.
 5. **Issue and roadmap material** defines future work only.
 
 Never describe a planned feature as production-ready merely because its name appears in a specification or schema design list.
@@ -146,6 +156,7 @@ Never describe a planned feature as production-ready merely because its name app
 14. [Troubleshooting](#14-troubleshooting)
 15. [Change checklists](#15-change-checklists)
 16. [Reference](#16-reference)
+17. [Build plan (milestones for Cursor)](#17-build-plan-milestones-for-cursor)
 
 ---
 
@@ -239,7 +250,7 @@ Changing an ID in a request must never allow cross-vendor access, at any step in
 | Admin | Manage platform operations within assigned RBAC permissions. |
 | Super admin | Full platform administration and emergency controls. |
 
-Seed data (`db:seed`) must create these roles under stable slugs (`customer`, `vendor_owner`, `vendor_staff`, `affiliate`, `support_agent`, `inventory_manager`, `marketing_manager`, `finance_manager`, `admin`, `super_admin`) per `SETUP_DATABASE.md`, each mapped to a fixed permission set.
+Seed data (`db:seed`) must create these roles under stable slugs (`customer`, `vendor_owner`, `vendor_staff`, `affiliate`, `support_agent`, `inventory_manager`, `marketing_manager`, `finance_manager`, `admin`, `super_admin`) per `08 §21`, each mapped to a fixed permission set.
 
 #### 1.2.1 Permission model (binding — implement exactly this)
 
@@ -298,7 +309,7 @@ imtiaz_mart/
 │   └── migrations/              RLS policies, extensions, storage buckets — kept in lockstep with Prisma migrations (§8.2)
 ├── workflows/
 │   └── n8n/                     Exported, version-controlled n8n workflow JSON (WF-01..WF-10, §9.8.3) — the versioned artifact referenced by SocialWorkflowRuns.workflow_version
-├── docs/                       Specifications and developer documentation (01–07, this handbook, README, SETUP_DATABASE)
+├── docs/                       Specifications and developer documentation (01–09, this handbook, README)
 ├── .github/
 │   └── workflows/               CI: lint, build, test, migrate-deploy, deploy
 ├── docker-compose.local.yml    OPTIONAL: local Redis + local Postgres for fully offline development only
@@ -485,6 +496,21 @@ The root `.env.example` is the authoritative variable inventory, split by enviro
 | `PLATFORM_FEE_RATE` | API/seed | Recommended | Marketplace commission configuration. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Web/API | Optional | Customer social login (distinct from Google Business Profile above). |
 | `ALLOW_SEED` | API/scripts | Local/CI only | Must be unset or `false` in any environment pointed at a production database. |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Web/API | Production | Cloudflare Turnstile on register/login/forgot-password/contact/review forms (`08 §1`). |
+| `SENTRY_DSN` / `SENTRY_AUTH_TOKEN` / `SENTRY_ENVIRONMENT` | Web/API/Worker | Staging/production | Error monitoring + release/source-map upload (`09 §7`). |
+| `AI_PROVIDER` / `AI_API_KEY` / `AI_MODEL_TEXT` / `AI_MONTHLY_BUDGET_USD` | API/Worker | Social/AI features | Provider-agnostic `AiProvider`; budget caps with degrade-to-manual (`06 A6`). |
+| `EMBEDDING_PROVIDER` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` | API/Worker | Visual search | `EmbeddingProvider` interface; model/version stored per row (`07 Part 3`). |
+| `UCP_SPEC_VERSION` / `UCP_SIGNING_KEY_ID` / `UCP_SIGNING_PRIVATE_KEY` | API | UCP profile | ECDSA P-256 key in secret store; spec version pinned (`07 §2.1`). |
+| `OPENAI_FEED_ENDPOINT` / `OPENAI_FEED_CREDENTIALS` | Worker | After merchant approval | Push target/credentials supplied by OpenAI (`07 §1.8`). |
+| `GOOGLE_MERCHANT_ID` / `GOOGLE_MERCHANT_API_CREDENTIALS` / `BING_MERCHANT_ID` | Worker | Feeds | Merchant Center feed/API access. |
+| `INDEXNOW_KEY` | API/Worker | Production | Key file served at `/{key}.txt`; ping on catalog changes (`07 §1.5`). |
+| `SMS_PROVIDER_KEY` / `WHATSAPP_CLOUD_TOKEN` / `WHATSAPP_PHONE_ID` | API/Worker | COD OTP, notifications | Providers **[SIGN-OFF]** (§0.1). |
+| `CARRIER_<NAME>_CREDENTIALS` | API/Worker | Phase 1.5 | Courier adapters (`08 §9`). |
+| `PAYMENT_<PROVIDER>_KEYS` / `PAYMENT_WEBHOOK_SECRETS` | API | Live payments | PSP/JazzCash/Easypaisa credentials + webhook secrets **[SIGN-OFF]**. |
+| `BACKUP_BUCKET_URL` / `BACKUP_ACCESS_KEY` / `BACKUP_SECRET_KEY` / `BACKUP_ENCRYPTION_KEY` | Ops job | Production | Off-site logical dumps + Storage replica (`09 §5`); separate from app credentials. |
+| `SUPABASE_STORAGE_BUCKET_VENDOR_DOCS` / `_SUPPORT_ATTACHMENTS` / `_INVOICES` / `_EXPORTS` | API | Yes | Private buckets (signed URLs ≤ 5 min). |
+| `REDIS_PREFIX` / `WORKER_CONCURRENCY` / `SCHEDULER_ENABLED` | API/Worker/Scheduler | Yes | Process-role config; exactly one scheduler instance runs jobs (leader lock). |
+| `PROCESS_ROLE` | API image | Yes | `api` \| `worker` \| `scheduler` (same image, different command, §5.5). |
 
 In production, `apps/api/src/app.module.ts` must reject missing, placeholder, or localhost values for key settings, reject a `DATABASE_URL`/`DIRECT_URL` that doesn't resolve to the environment's registered Supabase project ref, and require a 32-character social encryption key.
 
@@ -521,7 +547,7 @@ flowchart LR
 
 PostgreSQL full-text search and `pgvector` serve catalog and visual search respectively; Elasticsearch is not part of the default architecture (§0 of v2, carried forward). n8n never mutates production tables directly — it calls the same authenticated, permission- and entitlement-checked ATVOO API surface as any other client (`06` §36).
 
-Public machine-readable commerce endpoints are excluded from the global `/api` prefix and served at the storefront origin, including `/.well-known/commerce-manifest.json`, `/llms.txt`, and `/feeds/*` (§9.6). Confirm proxy/routing behavior when deploying the API separately from the storefront.
+Public machine-readable commerce endpoints are excluded from the global `/api` prefix and served at the storefront origin, including `/.well-known/ucp`, `/llms.txt`, `/robots.txt`, `/sitemap*.xml`, `/mcp`, and `/feeds/*` (§9.6). Confirm proxy/routing behavior when deploying the API separately from the storefront.
 
 ### 5.2 API bootstrap
 
@@ -538,6 +564,10 @@ Public machine-readable commerce endpoints are excluded from the global `/api` p
 Public and portal routes for about, account, admin, affiliate, authentication, blog, brands, careers, cart, categories, checkout, compare, contact, deals, FAQ, help, orders, pages, privacy, products, refund, returns, search, shipping, shop, terms, tracking, vendor, vendors, and visual search, matching the website hierarchy in `01_PROJECT_MASTER_SPECIFICATION.md` §5. Dynamic routes include product/category/vendor/blog/page/order slugs and must preserve metadata, loading, error, and not-found behavior when changed.
 
 ---
+
+### 5.5 Process model (binding)
+
+One container image, three roles selected by `PROCESS_ROLE` / start command: **`api`** (HTTP, ≥ 2 instances in production), **`worker`** (BullMQ consumers: feeds, embeddings, notifications, imports, IndexNow, revalidation, outbox dispatcher, social jobs), **`scheduler`** (single leader-locked instance: payout batches, reservation expiry, trending/best-seller jobs, feed pushes, reconciliation, retention/anonymisation). Workers/scheduler never run inside `api` instances. All jobs are idempotent, retried with backoff + jitter, and DLQ'd; `/health/live` and `/health/ready` exist on every role; graceful shutdown drains in-flight work. Topology, hosting and SLOs: `09 §4`, `§7`.
 
 ## 6. Backend development
 
@@ -583,7 +613,7 @@ Match `04_API_ARCHITECTURE.md` exactly; the running Swagger document is the auth
 | Vendor | `/vendors`, `/vendor/profile`, `/vendor/products`, `/vendor/orders`, `/vendor/inventory`, `/vendor/payouts`, `/vendor/analytics`, `/vendor/staff` |
 | Vendor social automation (Premium) | `/vendor/social-accounts`, `/vendor/social-accounts/connect/:platform`, `/vendor/social-accounts/disconnect/:platform`, `/vendor/social-automation/rules[/:id]`, `/vendor/social-automation/queue[/:id/approve\|reject]`, `/vendor/social-automation/generate-post`, `/vendor/social-automation/analytics`, `/social/webhooks/:platform` |
 | Store social automation (Admin/Marketing) | `/admin/store-social/accounts[/connect/:platform]`, `/admin/store-social/curation-rules`, `/admin/store-social/queue[/:id/approve\|edit\|reject]`, `/admin/store-social/sponsored-slots`, `/admin/store-social/fairness-report`, `/admin/store-social/analytics`, `/vendor/store-social/opt-in`, `/vendor/store-social/tag-handle`, `/vendor/store-social/exclude-product/:productId`, `/vendor/store-social/performance` |
-| AI agent commerce (public, machine-readable) | `/.well-known/commerce-manifest.json`, `/feeds/ucp`, `/feeds/acp`, `/feeds/perplexity`, `/llms.txt`, `/admin/agent-commerce/eligibility`, `/admin/agent-commerce/feed-status`, `/analytics/agent-attribution` |
+| AI agent commerce & discoverability (public, machine-readable) | `/.well-known/ucp`, `/.well-known/acp.json` (when enabled), `/feeds/google`, `/feeds/perplexity`, `/llms.txt`, `/llms-full.txt`, `/robots.txt`, `/sitemap.xml`, `/mcp`, `/admin/agent-commerce/*`, `/admin/discoverability/*`, `/analytics/agent-attribution` (OpenAI feed is a push job, not a public URL) — full list in `04` |
 | Product | `/products`, `/products/search`, `/products/visual-search`, `/products/filter`, `/products/recommendations`, `/products/compare`, `/products/reviews`, `/products/questions` |
 | Order | `/orders`, `/orders/create`, `/orders/payment`, `/orders/track`, `/orders/return`, `/orders/refund` |
 | CMS | `/pages`, `/blogs`, `/faqs`, `/banners`, `/menus` |
@@ -608,7 +638,7 @@ Note the last row: it does not appear in `04_API_ARCHITECTURE.md` because the es
 
 ## 7. Frontend development, UI, and UX (complete build system)
 
-`03_UI_UX_DESIGN_SYSTEM.md` specifies philosophy, color tokens, typography family, and a page-by-page feature inventory — it does not specify a typographic scale, spacing/grid system, component states, breakpoints, or interaction patterns, because a product spec isn't expected to. Those gaps would otherwise stop Cursor mid-build waiting for a judgment call. §7.3–§7.7 close them with resolved, opinionated defaults, chosen to fit the stated philosophy (premium, clean, fast, trustworthy, mobile-first — benchmarked against Apple, Nike, Stripe, Shopify Plus, Linear, Amazon) and the existing token set. Treat everything in this section as binding, the same as `03`'s own content — this is an extension of that spec, not a lower-priority alternative to it.
+`03_UI_UX_DESIGN_SYSTEM.md` is the **single source of truth for visual design and UX** (tokens in light/dark, type/spacing/layout/elevation/motion scales, component library and state matrix, accessibility rules, and every screen of the storefront, vendor and admin portals). This section holds only the *implementation* rules for the web app; do not duplicate or fork design values here — change `03`, then the code.
 
 ### 7.1 Next.js rules
 
@@ -619,112 +649,16 @@ Note the last row: it does not appear in `04_API_ARCHITECTURE.md` because the es
 - Treat URL search parameters as part of the page contract for search, filters, pagination, and shareable views.
 - Never import `@supabase/supabase-js` or reference Supabase keys in `apps/web` — all data access goes through `NEXT_PUBLIC_API_URL`.
 
-### 7.2 Design tokens (binding, per `03_UI_UX_DESIGN_SYSTEM.md`)
+### 7.2 Implementing the design system
 
-Design philosophy: premium, clean, modern, fast, trustworthy, mobile-first, conversion-focused.
-
-| Token | Light value | Dark value (resolved default — `03` requires dark mode but names only light-mode colors) |
-| --- | --- | --- |
-| Primary | `#0F172A` | `#E2E8F0` |
-| Accent | `#2563EB` | `#3B82F6` |
-| CTA | `#F97316` | `#FB923C` |
-| Success | `#16A34A` | `#22C55E` |
-| Warning | `#F59E0B` | `#FBBF24` |
-| Error | `#DC2626` | `#F87171` |
-| Background | `#FFFFFF` | `#0B1220` |
-| Surface | `#F8FAFC` | `#111827` |
-| Border | `#E2E8F0` | `#1F2937` |
-| Text | `#0F172A` | `#F1F5F9` |
-| Muted | `#64748B` | `#94A3B8` |
-
-Dark-mode values are this handbook's resolved default (chosen to preserve the same relative contrast and hue relationships as the light set) — if `03_UI_UX_DESIGN_SYSTEM.md` is later amended with explicit dark-mode hex values, those take precedence and this row should be updated to match, per the source-of-truth hierarchy. Primary font **Inter**, fallback **Geist**, both loaded as variable fonts via `next/font` (no external font-CDN request, so no CLS from a late-loading font). `apps/web/app/globals.css` and `apps/web/lib/design-tokens.ts` must define these exact values as CSS custom properties (`--color-primary`, etc.) switched via a `data-theme` attribute or `prefers-color-scheme`, matching the token-based theming approach used across this project's tooling — reconcile any drift as a bug, not a design decision made in code.
-
-### 7.3 Typography, spacing, layout, and elevation scales (resolved defaults — not specified in `03`)
-
-**Type scale** (size / line-height / weight):
-
-| Role | Size / line-height | Weight | Use |
-| --- | --- | --- | --- |
-| Display | 48px / 56px | 700 | Hero headlines only |
-| H1 | 36px / 44px | 700 | Page titles |
-| H2 | 30px / 38px | 700 | Section titles |
-| H3 | 24px / 32px | 600 | Card/group titles |
-| H4 | 20px / 28px | 600 | Sub-section titles |
-| H5 | 18px / 26px | 600 | Emphasized labels |
-| H6 | 16px / 24px | 600 | Small headings |
-| Body-lg | 18px / 28px | 400 | Lead paragraphs |
-| Body (base) | 16px / 24px | 400 | Default text |
-| Body-sm | 14px / 20px | 400 | Secondary text, form hints |
-| Caption | 12px / 16px | 500 | Labels, metadata, timestamps |
-
-Mobile scales down one step for Display/H1/H2 only (Display→36px, H1→30px, H2→26px); H3 and below stay constant across breakpoints, since further shrinking hurts legibility more than it helps density.
-
-**Spacing scale:** 4px base unit — `0, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80, 96` px (matches Tailwind's default scale; do not invent a parallel scale in component code).
-
-**Breakpoints** (mobile-first — base styles target the smallest width, wider rules layer on top): `sm 640px · md 768px · lg 1024px · xl 1280px · 2xl 1536px`.
-
-**Containers and grid:** max content width `1280px` (the `xl` breakpoint), horizontal padding `16px` below `md`, `24px` `md`–`lg`, `32px` at `lg`+. Desktop layouts use a 12-column grid; product/category grids specifically use `2` columns below `sm`, `3` at `sm`–`md`, `4` at `lg`, `5` at `xl`+.
-
-**Radius scale:** `sm 6px` (badges, chips) · `md 8px` (buttons, inputs, small cards) · `lg 12px` (cards, panels) · `xl 16px` (modals, sheets) · `full 9999px` (avatars, pills).
-
-**Elevation (shadow) scale:** `0` flat (default surface) · `1` `0 1px 2px rgba(15,23,42,0.06)` (hover on a card) · `2` `0 4px 12px rgba(15,23,42,0.10)` (dropdown, popover) · `3` `0 12px 32px rgba(15,23,42,0.16)` (modal, dialog) · `4` `0 20px 48px rgba(15,23,42,0.22)` (toast). Dark mode: same offsets, opacity raised roughly 1.5x since dark surfaces need a stronger shadow to read as elevated.
-
-**Z-index scale:** `base 0 · sticky-header 10 · dropdown 20 · overlay-backdrop 30 · modal 40 · toast 50 · tooltip 60`. Never assign an ad hoc z-index outside this scale.
-
-**Motion:** durations `150ms` (hover/focus micro-interactions), `250ms` (dropdown/accordion/tab transitions), `350ms` (modal/sheet enter-exit, page-level transitions). Easing: `ease-out` for entrances, `ease-in` for exits. Respect `prefers-reduced-motion: reduce` — disable non-essential transitions/animations (parallax, decorative motion) when set; keep only functionally necessary state changes (e.g., an instant swap instead of a slide).
-
-### 7.4 Component library and stack (resolved default)
-
-- **Styling:** Tailwind CSS, configured to read the CSS-variable tokens in §7.2 rather than hardcoded Tailwind theme colors, so dark mode and any future rebrand is a token change, not a find-and-replace across components.
-- **Interactive primitives:** shadcn/ui components built on Radix UI primitives (dialog, dropdown-menu, popover, tabs, select, toast, sheet, tooltip). Chosen because they're accessible by default (keyboard nav, focus management, ARIA roles already correct) which materially de-risks the WCAG 2.1 AA target (§1.0.1), and because they're copied into the codebase rather than imported as an opaque dependency, so they can be restyled to the token system in §7.2 without fighting a third-party visual language.
-- **Icons:** `lucide-react` — consistent stroke weight, tree-shakeable, and shadcn/ui's default icon set, so no second icon language enters the product.
-- **Do not** introduce a second component kit, icon library, or CSS methodology (e.g., CSS Modules alongside Tailwind) without updating this section — component visual consistency depends on there being exactly one system in play.
-
-### 7.5 Component states and interaction patterns (binding for every interactive component)
-
-Every interactive component must implement all of the following, not just default and hover — a component missing loading/error/disabled states is not complete, per §7.9:
-
-`default · hover · focus-visible (visible ring using the Accent token, never suppressed) · active/pressed · disabled (reduced opacity, no pointer events, no focus) · loading (skeleton or inline spinner, never a blank flash) · error (Error-token border and text, inline message) · success (Success-token feedback, e.g. a field after a valid async check)`.
-
-**Forms:** label always visible above the input — never placeholder-as-label, since the label disappears the moment the user types and fails accessible-name requirements. Validate on blur, not on every keystroke (keystroke-level validation reads as flickering/hostile). Error messages sit directly under the field, linked via `aria-describedby`, in the Error token. Required fields are marked explicitly (not color-only). Submit buttons show a loading state and are disabled during an in-flight request — never double-submittable. Successful submission gets an explicit confirmation (inline message or toast), never a silent success.
-
-**Notifications/toasts:** desktop — bottom-right, stacked, max 3 visible; mobile — full-width, bottom, above the tab bar. Success/info auto-dismiss after 4-6s; errors persist until manually dismissed. Announced via `aria-live="polite"` (`assertive` for errors) so screen-reader users aren't dependent on seeing the toast appear.
-
-**Modals vs. drawers/sheets:** use a centered modal (backdrop, focus-trapped, `Escape` closes, focus returns to the trigger element on close) for confirmations and short single-purpose forms. Use a drawer/sheet — slides from the right on desktop, from the bottom on mobile — for longer forms (e.g., the vendor product-edit form on a mobile viewport, filter panels on the PLP). This reconciles the desktop-centric modal pattern with the mobile-first requirement instead of forcing one pattern everywhere.
-
-**Loading, skeleton, empty, and error states — required on every data-driven view:** initial load shows a skeleton matching the final layout's shape (card grid → skeleton cards, list → skeleton rows) — never a bare spinner for content whose shape is already known. Empty states show a one-line explanation plus a primary action (e.g., "No orders yet" → *Start shopping*; "No products match your filters" → *Clear filters*) — never a blank area with no next step. Error states show a retry action and a plain-language message — never a raw stack trace, an error code with no explanation, or a generic "Something went wrong" that gives the user nothing to do next.
-
-**Images:** fixed aspect ratios by context (product card `1:1`, hero banner `21:9` or `16:9`, vendor logo `1:1`) to prevent layout shift while loading. Use `next/image` for automatic optimization and sizing, pointed at the Supabase Storage public URL and its transformation query parameters (§9.9) rather than an unoptimized `<img>`. Lazy-load anything below the fold. Alt text is always meaningful — never the filename, never omitted.
-
-### 7.6 Accessibility (WCAG 2.1 AA, per-component)
-
-Project-wide: keyboard navigation across every interactive surface, screen-reader support, ARIA compliance, color-contrast compliance (4.5:1 body text, 3:1 large text/UI components), color never the sole carrier of state (pair with icon and/or text), stable layout dimensions for cards/grids/toolbars during loading so nothing jumps.
-
-Per component type: **buttons/links** — visible focus ring, minimum 44x44px touch target on mobile; **icon-only buttons** — always an `aria-label`; **forms** — programmatic label association, errors announced via `aria-describedby`/`aria-live`; **modals/sheets** — focus-trapped, labelled by their heading (`aria-labelledby`), `Escape` closes, focus returns to the trigger; **images** — meaningful alt text (§7.5); **data tables** (admin/vendor dashboards) — proper `<th scope>` usage, not styled `<div>` grids pretending to be tables.
-
-### 7.7 Page-by-page build spec
-
-Build against `03_UI_UX_DESIGN_SYSTEM.md`'s full feature inventory, with the states in §7.5 applied to every listing/data view below (loading skeleton, empty state, error+retry) — that requirement isn't repeated per page below to avoid redundancy, but it applies to all of them without exception.
-
-**Navigation and search:** search bar with autosuggest, voice-search icon, visual-search icon (camera/upload → "find products like this," §9.7), filters and sort. Mobile: bottom navigation (home, categories, search with the visual-search camera button, cart, account) with sticky add-to-cart on product pages; desktop: full top navigation with mega-menu for categories.
-
-**Homepage:** announcement bar, hero slider, featured categories, category grid, flash sale (with countdown), featured products, trending products, best sellers, new arrivals, top rated, recommended products (AI recommendation engine, §1.0), featured vendors, popular brands, customer reviews (with video reviews), Instagram feed, blog articles, newsletter signup, trust badges, footer. Grid responsiveness per §7.3's product-grid rule (2/3/4/5 columns).
-
-**Product listing (category/search/brand/vendor-store pages):** product grid (§7.3 columns), filter sidebar (desktop) / filter sheet (mobile, per §7.5's drawer pattern), sort control, pagination or infinite scroll (pick one project-wide, do not mix), active-filter chips with individual remove, result count, empty-result state with "clear filters" action.
-
-**Product detail page:** image gallery with zoom, 360-degree viewer where available, product videos, lifestyle images, variant selector (color/size/etc. — reflecting the underlying `ProductVariants` model, §8.1), shipping and delivery-estimate display (sourced from the structured shipping data in §9.6.1, not hardcoded copy), add-to-cart, buy-now, wishlist toggle, compare toggle, share, reviews section with photo/video reviews, Q&A section, related products, vendor information block linking to the vendor store page. `schema.org` `Product`/`Offer` structured data (§9.6.1) on every instance of this template.
-
-**Cart and checkout:** cart drawer/page with per-vendor grouping in the line-item display (reflecting §8.1's `OrderItems.vendorId` grouping) while still presenting one combined total; checkout as a single-column stepped flow on mobile, two-column (form + order summary) on desktop; address, shipping method, payment step, review step; one-click checkout entry point where a saved payment method exists; order confirmation screen with tracking entry point.
-
-**Account (customer):** profile, addresses, order history (list → detail, showing per-vendor shipment status per §8.1's model, still under one Order), wishlist, reviews written, reward points balance and history, saved payment methods, support tickets.
-
-**Vendor portal:** store profile, product management (list/create/edit/submit/archive, §9.4), inventory (§8.5), order management (scoped to that vendor's `Shipments`), shipping management, marketing tools, store analytics, customer engagement tools, staff accounts, payout management (including the escrow view added in §0.3 Fault 3 -- `/vendor/payouts/escrow`), and the full Social Media Automation UI specified in `03_UI_UX_DESIGN_SYSTEM.md`: connected-accounts grid (per-platform cards), connect/disconnect (OAuth), automation toggle (off by default, per platform), plan-gate banner tied to the entitlement model (§1.2.2, not a hardcoded tier check in the component), trigger-event selector, posting-schedule calendar, approval queue (post-by-post, matching the approval state machine in §9.8.4), AI caption preview card (editable before publish — never auto-published without this step being shown when approval is required), tone/style presets, frequency-cap and blackout-hours controls, excluded products/categories list, social performance dashboard, audit/history log, and the Store-Channel opt-in card (opt-in toggle, tag-my-handle toggle, excluded-products list, read-only "Featured by [Store]" performance).
-
-**Admin portal:** vendor management (including approval workflow, §9.5.1), customer management, product management (approval queue, §9.5.1), order management, finance management (including the escrow/payout admin endpoints in §0.3 Fault 3), CMS management, marketing management, report management, settings management, RBAC management, audit logs, and the Store Social Channel UI: store-accounts panel, curation-weight sliders (trending/new/best-sellers/sponsored ratio), editorial calendar (approve/edit/reject, drag-to-reschedule), sponsored-slot booking manager, fairness-audit report, store-channel performance dashboard.
-
-**CMS-rendered pages:** pages, blog (list/post), FAQs, banners -- rendered from CMS content (§9.5's CMS module), not hardcoded page bodies, so marketing can update them without a deploy.
-
-**Standard content pages:** about, careers, contact, help center, support center, FAQ, privacy policy, terms & conditions, shipping/return/refund policy, matching the site hierarchy in `01_PROJECT_MASTER_SPECIFICATION.md` §5.
+- **Tokens:** `apps/web/app/globals.css` defines the CSS variables from `03 §1` (light on `:root`, dark on `[data-theme="dark"]`, system preference default, user toggle persisted); `apps/web/lib/design-tokens.ts` exports the same values for non-CSS use. A CI test compares both files to the token table in `03` and fails on drift.
+- **Stack (no alternatives):** Tailwind CSS reading the variables, shadcn/ui on Radix primitives (copied into `apps/web/components/ui`), `lucide-react` icons, `next/font` Inter (+Geist fallback), `next-intl` for strings, React Hook Form + Zod for forms. A second component kit, icon set or CSS methodology requires an ADR.
+- **Components:** build the component inventory in `03 §4` first (Storybook with light/dark and mobile/desktop for every state: default, hover, focus-visible, active, disabled, loading, error, success). Pages compose these; no one-off styling.
+- **Data states:** every data-driven view ships skeleton, empty, error+retry, offline/stale and forbidden/not-found states (`03 §4`), via `loading.tsx`/`error.tsx`/`not-found.tsx` and shared `EmptyState`/`ErrorState` components.
+- **Screens:** build exactly the screen inventory in `03 §6–§18` (search, home, listing, product, cart/checkout/order, account, auth/onboarding, vendor portal incl. social automation, admin portal incl. store social channel, mobile/PWA, system pages). The vendor/admin social UI follows `06` states and the autonomy modes in `06 A1`.
+- **SEO/LLM rendering:** public pages are server-rendered with complete product facts and JSON-LD in the initial HTML (`07 §1.2–§1.3`); a no-JS fetch test runs in CI.
+- **Performance and accessibility budgets:** `03 §5` and `§20` are CI gates (axe, Lighthouse CI, bundle budget).
+- **Analytics/pixels:** only after consent (`08 §18`); load deferred; server-side event relay with `event_id` dedupe.
 
 ### 7.8 Adding a page
 
@@ -732,15 +666,15 @@ Build against `03_UI_UX_DESIGN_SYSTEM.md`'s full feature inventory, with the sta
 2. Read the owning API controller/service and shared DTOs.
 3. Add the route under `apps/web/app/` using existing route-group conventions.
 4. Keep data loading on the server when possible; client components only for interactive islands.
-5. Implement loading (skeleton), error (retry), empty, unauthorized, and not-found states per §7.5.
-6. Use the tokens, scales, and components from §7.2–§7.4 — no ad hoc colors, spacing, or one-off component patterns.
+5. Implement loading (skeleton), error (retry), empty, unauthorized, and not-found states per `03 §4`.
+6. Use the tokens, scales, and components from `03 §1–§4` (implemented per §7.2) — no ad hoc colors, spacing, or one-off component patterns.
 7. Add metadata and structured data (`schema.org` `Product`/`Offer` for commerce pages -- §9.6) where the page represents indexable commerce content.
-8. Check desktop and mobile layout against the breakpoints in §7.3, keyboard operation, and API failure behavior.
+8. Check desktop and mobile layout against the breakpoints in `03 §3`, keyboard operation, and API failure behavior.
 9. Build the web application before considering the change complete.
 
 ### 7.9 UI/UX definition of done
 
-A screen is not complete merely because the happy path renders. It is complete only when: it uses the binding tokens and scales (§7.2-§7.3), not invented values; every interactive element implements the full state set in §7.5; loading/empty/error states exist for every data-driven view; the accessibility requirements in §7.6 are met for every component type present; the layout is verified at `sm`, `md`, `lg`, and `xl` breakpoints, not just desktop; dark mode is verified, not assumed to "just work" from the light-mode styles; and -- where applicable -- the page matches the §7.7 build spec for that page type rather than a simplified stand-in.
+A screen is not complete merely because the happy path renders. It meets the definition of done in `03 §21` (binding tokens and scales, full state matrix, loading/empty/error states, accessibility per `03 §5`, verified at sm/md/lg/xl and in dark mode, matches the `03 §6–§18` screen spec) and the budgets in `03 §20`.
 
 ### 7.10 Authentication boundary
 
@@ -752,7 +686,7 @@ The browser may hide or redirect protected views for usability, but the API rema
 
 ### 8.1 Schema ownership
 
-The Prisma schema at `packages/database/prisma/schema.prisma` is the persisted data contract. Supabase-hosted PostgreSQL 17+ (with `pgvector`) is the primary database in every environment, confirmed independently by `02_DATABASE_ARCHITECTURE.md`, `SETUP_DATABASE.md`, and `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md`. **Identifiers are UUID v7**, not a generic UUID version — this is explicit in `02` and matters for index locality and time-ordering; do not substitute UUID v4 defaults without a reason recorded in the schema.
+The Prisma schema at `packages/database/prisma/schema.prisma` is the persisted data contract. Supabase-hosted PostgreSQL 17+ (with `pgvector`) is the primary database in every environment, confirmed by `02_DATABASE_ARCHITECTURE.md` and `06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md`. **Identifiers are UUID v7**, not a generic UUID version — this is explicit in `02` and matters for index locality and time-ordering; do not substitute UUID v4 defaults without a reason recorded in the schema.
 
 Full domain-module inventory is defined in `02_DATABASE_ARCHITECTURE.md` and is not reproduced in full here to avoid the two documents drifting; confirm each model against that file before using it. The domains are: Authentication (Users, Roles, Permissions, UserRoles, Sessions, RefreshTokens, OAuthAccounts, Devices), Customer, Vendor, **Social Media Automation** (superseded by the revised model in `06` §27 — see §8.1.1 below), Visual Search, AI Agent Commerce, Product Catalog, Inventory, Order Management, Payment, Marketing, Customer Engagement, CMS, Notifications, Support, Analytics, and Audit.
 
@@ -830,6 +764,10 @@ If a future revision deliberately adopts Supabase Auth or client-side `supabase-
 
 ---
 
+### 8.7 Supabase production requirements (summary of `09 §5`)
+
+Staging and production run on **Supabase Pro** (Free pauses on inactivity and has no backups); production adds the **PITR** add-on plus nightly off-site `pg_dump` and a separate Storage replica (database backups do not include stored objects); run Security and Performance Advisors with zero errors before launch; enforce SSL, restrict network access where possible; separate least-privilege roles (app / read-only analytics / migrations); pin Prisma and follow its documented config style for that version (shadow-database requirements for `migrate dev` apply to the dev project only; `migrate deploy` only in CI against `DIRECT_URL`); create buckets `product-media`, `social-assets` (public-read), `vendor-docs`, `support-attachments`, `invoices`, `exports` (private) with MIME/size limits and a malware-scan step before any object is referenced.
+
 ## 9. Business workflows
 
 ### 9.1 Authentication and authorization
@@ -868,48 +806,20 @@ Admin actions use the permission model (§1.2.1), input validation, audit loggin
 
 Products have an independent `approvalStatus` (`PENDING`/`APPROVED`/`REJECTED`), optional `approvalNote`, and `reviewedAt`, in addition to the selling `status`. New vendor products enter `DRAFT/PENDING`. Vendors submit with `POST /api/v1/vendor/products/:id/submit`. Admins review from `/admin/products` via `POST /api/v1/admin/products/:id/approve` or `/reject`. Approval sets `ACTIVE/APPROVED` and indexes for search; rejection sets `DRAFT/REJECTED` and removes from search.
 
-### 9.6 AI-agent commerce (rewritten per `07_AI_AGENT_COMMERCE_READINESS.md`)
+### 9.6 LLM discoverability and AI-agent commerce (summary of `07`; `07` is authoritative)
 
-AI shopping agents query structured product data directly rather than browsing pages. Three protocols matter as of 2026, and are additive, not mutually exclusive:
+**Goal:** ATVOO products are findable, citable and recommendable in ChatGPT, Gemini/AI Mode, Perplexity, Claude, Copilot and classic search **from day one**. Order of importance (build in this order):
 
-| Protocol | Owner | Mechanism |
-| --- | --- | --- |
-| **UCP** (Universal Commerce Protocol) | Google, launched Jan 2026 with Shopify/Walmart/Target/Etsy | Open, intent-based manifest; serves Google AI Mode, Gemini, and Microsoft Copilot's UCP path |
-| **ACP** (Agentic Commerce Protocol) | OpenAI | Powers ChatGPT's Instant Checkout, built on Stripe as the payment rail |
-| **Perplexity Merchant Program** | Perplexity | Accepts Google-Shopping-format feeds; "Buy with Pro" checkout via PayPal/Venmo, merchant stays merchant-of-record |
+1. **Crawlable, server-rendered pages** with complete facts + valid JSON-LD (`Organization`, `WebSite`, `Product`/`Offer`/`AggregateRating`/`MerchantReturnPolicy`/`OfferShippingDetails`, `BreadcrumbList`, `FAQPage`) — AI crawlers mostly do not run JavaScript. No-JS and JSON-LD checks run in CI (`07 §1.10`).
+2. **robots.txt policy generated from settings:** allow `OAI-SearchBot`, `ChatGPT-User`, `Claude-SearchBot`, `Claude-User`, `PerplexityBot`, `Perplexity-User`, `Googlebot`, `Bingbot`, `Applebot`; training bots (`GPTBot`, `ClaudeBot`, `Google-Extended`, `Applebot-Extended`, `CCBot`) disallowed by default, admin-togglable. Cloudflare WAF/bot rules must **allowlist verified AI search bots** (`09 §6`).
+3. **Sitemaps + IndexNow + Search Console/Bing Webmaster**, canonical URLs, 301/410 handling, ISR with on-demand revalidation on price/stock change.
+4. **`/llms.txt`, `/llms-full.txt`, markdown twins** of product/category/policy pages (cheap context; not a ranking guarantee).
+5. **Merchant feeds (launch):** Google Merchant Center, Bing Merchant Center, Perplexity (Google-format file), and the **OpenAI product feed — pushed** by a scheduled job (initial sample, then daily snapshots) to OpenAI's allow-listed endpoint after merchant approval. All exporters read the single Product Data Layer; validation, diff and rejection ingestion are mandatory (`07 §1.8`).
+6. **UCP:** serve a discovery-only profile at **`/.well-known/ucp`** (pinned spec version, HTTPS, signing keys); `/.well-known/commerce-manifest.json` 301-redirects there. Catalog REST endpoints Phase 1.5; checkout Phase 2 (flag OFF).
+7. **Public read-only MCP server** at `/mcp` (`search_products`, `get_product_details`, `check_availability`, `list_categories`, `get_shipping_estimate`, `get_store_policies`) — rate-limited, no PII.
+8. **Attribution and monitoring:** `AgentOrderAttribution`, AI-bot crawl analytics, referral parsing, and a **weekly prompt-panel test** across ChatGPT/Gemini/Perplexity/Claude (`07 §1.9`).
 
-**Strategy: fix product-data hygiene once, generate protocol-specific feeds from that single clean source**, rather than treating each AI surface as a separate integration project.
-
-#### 9.6.1 What "discoverable" requires
-
-- `schema.org` `Product`/`Offer` structured data on every public product page — the foundation, benefiting classic SEO, Google Shopping, and every AI agent simultaneously.
-- A machine-readable manifest at `/.well-known/commerce-manifest.json` (UCP's equivalent of `robots.txt` for commerce agents) declaring store identity, categories, policies, and feed locations.
-- `/llms.txt` at the domain root — plain-language guidance for AI crawlers about brand, catalog scope, and how to interpret ATVOO's data, separate from human SEO copy.
-- Structured shipping data per product/vendor (`country:region:service:price:min_handling:max_handling:min_transit:max_transit`) — agents need this to answer "can I get it by Friday" without parsing a policy page.
-- Per-product `is_eligible_search` and `is_eligible_checkout` flags, so a vendor/admin can include a product in agent discovery while excluding it from autonomous checkout (regulated categories, made-to-order items, anything needing human judgment).
-
-#### 9.6.2 Feed architecture
-
-A single internal **Product Data Layer** (canonical, always current from Products/ProductVariants/Inventory) feeds three exporters: UCP → `/feeds/ucp` + manifest; ACP → `/feeds/acp` (Stripe-compatible fields); Perplexity/Google-Shopping-format → `/feeds/perplexity`. Feeds refresh near-real-time for price/availability (stale data is worse than no listing — agents penalize merchants flagged as inaccurate) and are validated for required-field completeness before publishing (missing GTIN, broken image URLs, and price/currency mismatches are the most common rejection causes).
-
-#### 9.6.3 Checkout path (two tiers, vendor/admin configurable per product)
-
-- **Discovery only** (`is_eligible_search: true`, `is_eligible_checkout: false`) — agent links back to the ATVOO product page for normal checkout. Lowest effort, safest starting point.
-- **Agentic checkout** (`is_eligible_checkout: true`) — agent completes the purchase in-platform via ACP/Stripe or Perplexity's PayPal/Venmo rail. Requires seller ToS/Privacy Policy URLs in the feed. Settles against the same merchant-of-record/escrow flow as normal checkout (§0.2) — ATVOO captures and holds the payment, so no separate payment-rail ownership decision is needed once §0.2 is signed off.
-
-**Recommended rollout:** discovery-only across the whole catalog first, then enable agentic checkout selectively once order attribution and fraud/dispute handling for agent-originated orders (§9.6.5) are proven. Keep a platform-wide disable switch.
-
-#### 9.6.4 MCP pilot (recommended low-risk first step)
-
-Because Claude and other assistants increasingly connect to external tools via the Model Context Protocol, ATVOO can expose a lightweight MCP server offering `search_products`, `get_product_details`, and `check_availability` tools — a smaller lift than a full ACP/UCP integration, and a natural fit given the assistant used to build this platform. Worth piloting before committing to the heavier protocols.
-
-#### 9.6.5 Attribution, analytics, and trust
-
-Every order gets an `AgentOrderAttribution` record (which agent/protocol sourced it: ChatGPT, Perplexity, Gemini, organic, none) — without this, agentic checkout looks like a normal direct order with no referrer. Admin dashboard tracks agent impression share, recommendation-inclusion rate, and agent-attributed conversion rate on 30/60/90-day windows. Fraud/dispute handling must explicitly cover agent-originated orders — return abuse and payment disputes behave differently when the "customer" was an autonomous agent.
-
-#### 9.6.6 Compliance
-
-Some large retailers have blocked AI crawlers or sued over unauthorized agent purchases — a live, contested space. Keep agent eligibility an explicit opt-in at the vendor/product level, never silently on for the whole catalog, and keep an admin-level kill switch to disable agentic checkout platform-wide if a protocol partner's terms or behavior become a liability.
+Eligibility: `is_eligible_search` default true for approved, quality-scored (≥ 60) products; `is_eligible_checkout` default **false** and requires vendor opt-in, admin kill switch on, non-restricted category and a configured rail. Agentic checkout is **not** a launch item (OpenAI is moving to discovery + merchant-owned checkout); it settles against the same escrow model as normal checkout when enabled (§0.2). Price parity: agents see the same prices as humans (nightly test). Protocol specs move quickly: pin versions in code (`UCP_SPEC_VERSION`, etc.), contract-test them, and re-verify quarterly (`09 §12`). Which merchant programs are available depends on country/entity — confirm before building each exporter (`09 §2` items 11–14).
 
 ### 9.7 Visual search (`pgvector`)
 
@@ -1034,9 +944,17 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 | **SMAE: platform capability registry** | **Planned** | §9.8.1; required before any platform adapter ships. |
 | **SMAE: vendor channel (Mode A)** | Partial/planned | Phase 1–2 scope, §9.8.7. |
 | **SMAE: store channel (Mode B)** | Planned | Phase 4 scope. |
-| AI commerce manifest and feeds (UCP/ACP/Perplexity) | Partial | Public service/controller paths exist; partner validation, freshness, attribution, checkout incomplete per §9.6. |
-| MCP pilot (`search_products`, `get_product_details`, `check_availability`) | Planned | Recommended low-risk first step, §9.6.4. |
-| Agentic checkout | Planned/prerequisite | Requires payment rail, fraud/dispute controls, attribution, partner approval, and the open payout-model decision (§0.1). |
+| LLM discoverability: SSR + JSON-LD + robots policy + sitemaps + IndexNow + llms.txt + markdown twins | **Needs confirmation / launch-critical** | `07 Part 1`; verify no-JS HTML contains facts, JSON-LD valid, AI search bots not blocked at WAF. |
+| Merchant feeds: Google, Bing, Perplexity (pull) and OpenAI (push after approval) | Partial/prerequisite | `07 §1.8`; exporters read the Product Data Layer; approvals per `09 §2`. |
+| UCP discovery profile at `/.well-known/ucp` (discovery-only) | Planned | Replaces earlier `commerce-manifest.json` path (301). UCP catalog endpoints Phase 1.5, checkout Phase 2. |
+| Public read-only MCP server (`/mcp`) | Planned (launch) | `07 §2.5`; six read-only tools, rate-limited, no PII. |
+| Agentic checkout (UCP/ACP) | Planned (Phase 2), flag OFF | Not a launch item; settles against the §0.2 escrow flow when enabled. |
+| Business rules engine (COD, shipping profiles, tax, returns, coupons, loyalty, reviews, fraud) | Planned/partial | `08`; every value is a `PlatformSettings` entry, risky ones behind flags. |
+| Process roles `api` / `worker` / `scheduler`, outbox dispatcher, job idempotency | **Needs confirmation** | §5.5; confirm workers do not run inside API instances. |
+| Observability (Sentry, structured logs, metrics, SLO alerts), runbooks, DR drill | Planned | `09 §7–§9`; launch gate. |
+| Security gates (pen test, IDOR matrix, CodeQL, secret scan, SBOM) | Planned | `05`, `09 §10`; launch gate. |
+| Consent management + server-side pixels (GA4/Meta CAPI/TikTok) | Planned | `08 §18`. |
+| PWA (manifest, service worker, offline shell, web push) | Planned (launch) | `03 §17`. |
 | Malware scanning on uploads | Planned/prerequisite | Not yet implemented; required before accepting untrusted vendor uploads at scale. |
 | Mobile apps/PWA | Planned | Product direction only unless a separate implementation is added. |
 | CI pipeline (lint/build/test/migrate) | **Needs confirmation** | §13.5; confirm `.github/workflows/` exists and is green on `main`. |
@@ -1065,9 +983,9 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 
 - Confirm RLS default-deny policies exist for every table, including the full revised SMAE model (§8.1.1).
 - Confirm Supabase Storage buckets are correctly scoped (public-read for product/social media, private for any future document uploads).
-- Complete payment provider, webhook, reconciliation, refund, and dispute handling — including agent-originated order disputes (§9.6.5).
+- Complete payment provider, webhook, reconciliation, refund, and dispute handling — including agent-originated order disputes (`07 §2.6`).
 - Complete social provider approval, token lifecycle, moderation, rate limiting, and n8n queue/DLQ operations, in the phased order of §9.8.7.
-- Validate AI protocol terms, feed schemas, consent/eligibility, and kill switches for both AI-agent commerce (§9.6.6) and social automation (§9.8.8).
+- Validate AI protocol terms, feed schemas, consent/eligibility, and kill switches for both AI-agent commerce (`07 §2.6`) and social automation (§9.8.8).
 - Implement malware scanning on vendor uploads.
 - Build the escrow/payout schema and API against the default flow in §0.2; keep the release-of-funds job behind a flag until finance/legal sign-off is obtained — do not enable real vendor payouts before that sign-off exists.
 - Define retention, deletion, export, and incident response policies for customer, vendor, and connected-social-account data — including the SMAE rule that required audit/financial records are not deleted merely because a vendor requests deletion (§9.8.8).
@@ -1219,7 +1137,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 ```
 
-`migrate-deploy` runs before the hosting provider's own Git-triggered redeploy, satisfying §13.3's release order. Extend with an n8n workflow-import step once the n8n hosting decision (§0.1) is finalized, so `workflows/n8n/` is the deployed source of truth, not a point-in-time export.
+The CI above is the minimum skeleton; the **full required-check list** (typecheck, coverage gate, migration/RLS-on-every-table test, OpenAPI diff, Playwright smoke, axe, Lighthouse CI, JSON-LD/no-JS checks, CodeQL/gitleaks/audit/container scan, bundle budget) is in `05 §CI REQUIRED CHECKS` and is binding. `migrate-deploy` runs before the hosting provider's own Git-triggered redeploy, satisfying §13.3's release order. Extend with an n8n workflow-import step once the n8n hosting decision (§0.1) is finalized, so `workflows/n8n/` is the deployed source of truth, not a point-in-time export.
 
 ---
 
@@ -1293,11 +1211,11 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 
 - [ ] Identify route protection and data owner.
 - [ ] Prefer server-side data loading and existing helpers.
-- [ ] Implement the full component state set (§7.5): loading skeleton, error+retry, empty, disabled, success — not just the happy path.
-- [ ] Use the binding design tokens and type/spacing/radius/elevation scales (§7.2–§7.3) and the shadcn/ui + Tailwind + lucide-react stack (§7.4) — no ad hoc colors, spacing, or a second component kit.
-- [ ] Match the §7.7 page-by-page build spec for this page type, not a simplified stand-in.
-- [ ] Verify accessibility per §7.6 for every component type on the page.
-- [ ] Verify layout at `sm`/`md`/`lg`/`xl` (§7.3) and in dark mode — not desktop-light-mode only.
+- [ ] Implement the full component state set (`03 §4`): loading skeleton, error+retry, empty, disabled, success — not just the happy path.
+- [ ] Use the binding design tokens and type/spacing/radius/elevation scales (`03 §1–§3`) and the shadcn/ui + Tailwind + lucide-react stack (§7.2) — no ad hoc colors, spacing, or a second component kit.
+- [ ] Match the `03 §6–§18` screen spec for this page type, not a simplified stand-in.
+- [ ] Verify accessibility per `03 §5` for every component type on the page.
+- [ ] Verify layout at `sm`/`md`/`lg`/`xl` (`03 §3`) and in dark mode — not desktop-light-mode only.
 - [ ] Avoid exposing secrets or trusting client totals/permissions; confirm no `supabase-js` or Supabase key ever reaches `apps/web`.
 - [ ] Test API failure and mobile layouts.
 
@@ -1354,14 +1272,16 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 
 ### 16.2 Specialist specifications
 
-- [Project master specification](./01_PROJECT_MASTER_SPECIFICATION.md) — vision, modules, revenue, roles, NFRs, market-weakness mapping.
-- [Database architecture](./02_DATABASE_ARCHITECTURE.md) — full model inventory; §8.1.1 above notes the SMAE-specific revision.
-- [UI/UX design system](./03_UI_UX_DESIGN_SYSTEM.md) — binding design tokens, page-by-page component inventory.
-- [API architecture](./04_API_ARCHITECTURE.md) — full endpoint inventory and API rules.
-- [Development standards](./05_DEVELOPMENT_STANDARDS.md) — Clean Architecture/DDD/SOLID, testing/coverage target, DevOps stack, and the Cursor operating rule reproduced at the top of this handbook.
-- [Social media automation engine](./06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md) — the SMAE master spec; §9.8 above is a summary, not a substitute.
-- [AI agent commerce and visual search](./07_AI_AGENT_COMMERCE_READINESS.md) — UCP/ACP/Perplexity/MCP and visual search; §9.6–9.7 above are a summary.
-- ~~Database setup notes (`SETUP_DATABASE.md`)~~ — **superseded and retired, §0.3.** Its Supabase pooler/direct-URL guidance is fully absorbed into §3–§4 above. Delete the file from the repository (or leave a one-line pointer to this handbook in its place) and remove its row from `README.md`'s document table.
+- [01 Project master specification](./01_PROJECT_MASTER_SPECIFICATION.md) — vision, scope tiers, metrics, assumptions.
+- [02 Database architecture](./02_DATABASE_ARCHITECTURE.md) — models, conventions, RLS, sub-orders, reconciled social model.
+- [03 UI/UX design system](./03_UI_UX_DESIGN_SYSTEM.md) — tokens, scales, components, all screens.
+- [04 API architecture](./04_API_ARCHITECTURE.md) — contracts and full endpoint inventory.
+- [05 Development standards](./05_DEVELOPMENT_STANDARDS.md) — code, tests, CI gates, security, git, Cursor rule.
+- [06 Social media automation engine](./06_SOCIAL_MEDIA_AUTOMATION_ENGINE.md) — SMAE + Implementation Addendum.
+- [07 LLM discoverability, AI agent commerce, visual search](./07_AI_AGENT_COMMERCE_READINESS.md)
+- [08 Business rules and domain flows](./08_BUSINESS_RULES_AND_DOMAIN_FLOWS.md) — resolved defaults and settings catalogue.
+- [09 Launch readiness and operations](./09_LAUNCH_READINESS_AND_OPERATIONS.md) — approvals, topology, SLOs, DR, go-live gate.
+- `SETUP_DATABASE.md` — **retired** (stub only); setup lives in §3–§4.
 
 ### 16.3 Glossary
 
@@ -1377,7 +1297,7 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 | n8n | Workflow orchestration engine; coordinates SMAE without owning business truth (§9.8.3). |
 | DLQ | Dead-letter queue — storage for jobs that exhausted retry attempts. |
 | UCP / ACP | Universal Commerce Protocol (Google) / Agentic Commerce Protocol (OpenAI/Stripe) — see §9.6. |
-| MCP | Model Context Protocol — basis for the recommended low-risk agent-commerce pilot (§9.6.4). |
+| MCP | Model Context Protocol — basis for the launch-scope public read-only agent integration (`07 §2.5`). |
 | Escrow | Held funds pending vendor payout release; business model open per §0.1. |
 | Idempotency key | Client- or system-supplied identifier ensuring a repeated request/event does not create duplicate side effects. |
 
@@ -1392,11 +1312,36 @@ Check `SocialWorkflowRuns` for the execution reference and status; confirm the w
 - Complete and validate provider payment reconciliation and webhooks, including agent-originated order disputes.
 - Complete platform adapters in the phased order of §9.8.7 — do not build Phase 3 platforms before Phase 1–2 are production-solid.
 - Validate visual-search embedding generation, pgvector index strategy, and response thresholds against the <2s NFR (§1.0.1).
-- Validate AI feed schemas, freshness, attribution, partner approval, and both kill switches (agent commerce §9.6.6, social automation §9.8.8).
-- Reconcile any differences between the binding design tokens (§7.2) and actual web tokens/components.
+- Validate AI feed schemas, freshness, attribution, partner approval, and both kill switches (agent commerce `07 §2.6`, social automation §9.8.8).
+- Reconcile any differences between the binding design tokens (`03 §1`) and actual web tokens/components.
 - Confirm ownership, retention, backup, and incident-response policies for all operational data, including the Supabase plan tier's actual backup/PITR coverage.
 - Implement malware scanning on vendor uploads.
-- Pilot the MCP server (§9.6.4) before committing to full UCP/ACP integration work.
+- Ship the read-only MCP server and discovery-only UCP profile at launch (`07 §2.2`); defer UCP/ACP checkout to Phase 2.
 - Finalize the staging hosting target and extend the CI workflow (§13.5), including n8n workflow import once hosting is decided.
 
 Documentation is part of the system. Update this handbook when a command, deployment model, module boundary, workflow, security control, or feature status changes.
+
+---
+
+## 17. Build plan (milestones for Cursor)
+
+Build in this order. A milestone is done only when its exit criteria pass in CI on staging and the relevant handbook §15 checklist is satisfied. Each milestone ships its migrations (+RLS), seeds, tests, Storybook stories (UI), OpenAPI, audit/observability hooks and flag defaults. Items needing sign-off are built but flagged OFF.
+
+| # | Milestone | Scope (specs) | Exit criteria |
+|---|---|---|---|
+| M0 | Foundation | Monorepo (npm workspaces + Turborepo), TS strict, lint/format/hooks/commitlint, CI skeleton (`05`), env validation, Supabase dev+staging projects, Prisma baseline (`uuid_generate_v7`, extensions, RLS-on-every-table test), logger, request-id, error/pagination/idempotency/rate-limit infrastructure (`04` contracts), health endpoints, process roles (§5.5), outbox + BullMQ plumbing, design tokens + Storybook shell (`03`) | CI green; staging deploys; `/health/ready` ok; RLS test enforced |
+| M1 | Identity, RBAC, settings | Auth flows incl. email verify, rotating refresh, 2FA, Turnstile, sessions (`08 §1`); roles/permissions/entitlements seeds (§1.2); `PlatformSettings`, `FeatureFlags`, `AuditLogs`; admin shell | Auth/IDOR/permission matrix tests green; admin 2FA enforced |
+| M2 | Vendors and catalog | Vendor onboarding/KYC/agreements (`08 §2`), taxonomy + attributes, products/variants, media upload + malware scan, quality score, approval workflow + auto-checks, bulk import/export, slug redirects, vendor + admin catalog UIs | Vendor-isolation tests; import 5,000-row test; approval SLA queue |
+| M3 | Storefront core + SEO | Home, listing, PDP (SSR/ISR, JSON-LD, markdown twins), FTS search + autosuggest, CMS pages/blog/FAQ, robots/sitemaps/llms.txt, canonical/redirects, i18n scaffold, PWA shell | No-JS HTML test, JSON-LD validation, Lighthouse budgets green |
+| M4 | Cart, checkout, orders | Cart, reservations, quote, checkout (card via provider interface, COD + OTP, JazzCash/Easypaisa adapters), webhooks, order/shipment/payment state machines, invoices, notifications (email + SMS/WA interfaces), vendor fulfilment, tracking | E2E purchase card+COD; webhook idempotency; oversell test |
+| M5 | Money | Ledger, escrow, commission, payout batches (flag OFF), refunds/returns, reconciliation, chargebacks, tax engine, finance UI + step-up | Money/commission/tax unit tests 100%; reconciliation job |
+| M6 | Engagement | Reviews/Q&A, wishlist/compare/alerts, coupons, gift cards, loyalty, referrals, affiliates, support tickets/KB, fraud rules + queue | Abuse tests; loyalty ledger invariants |
+| M7 | Discoverability and agents | Exporters (Google/Bing/Perplexity/OpenAI push), validation + rejection ingestion, IndexNow, UCP discovery profile, MCP server, attribution, bot analytics, prompt-panel tooling, admin dashboard (`07`) | Feed validators clean; contract tests; verified-bot allowlist test |
+| M8 | Social automation | Outbox → n8n WF-01..10, capability registry, Meta adapter (FB+IG), rules, AI generation + moderation, approval/auto modes (`06 A1`), scheduler, DLQ, analytics/attribution, vendor + admin UIs, Mode B store channel, kill switches | Full-path E2E on staging test accounts; chaos tests (`06 A10`) |
+| M9 | AI and visual search | Embeddings pipeline, visual search, text-embedding hybrid search, recommendations, AI content assist, AI review summaries, cost budgets | <2 s p95 visual search; budget kill-switch test |
+| M10 | Portals, analytics, consent | Vendor/admin dashboards and reports, consent + GA4/CAPI/TikTok server events, PWA push/offline | Consent gating tests; dashboards match first-party data |
+| M11 | Hardening | Pen-test fixes, load tests (3× peak), a11y pass, observability + alerts, runbooks, DR drill, backups + restore test (`09 §5–§10`) | `09 §10` gates passed |
+| M12 | Launch | `09 §11` sequence and §14 checklist | Go-live gate fully checked |
+| M13 | Phase 1.5 / 2 | Carrier adapters, AI support assistant, Pinterest/X/TikTok, UCP catalog + checkout, Urdu/RTL, ads engine, native apps | Per phase plan |
+
+Parallelisation: M2–M3 may overlap after M1; M7 and M8 may start once M3/M4 contracts stabilise; M9 after M2. Start every **[LEAD TIME]** item in `09 §2` on day 0 — they run in parallel with M0–M11 and gate M12, not earlier milestones.
