@@ -40,4 +40,37 @@ npm run lint
 npm run build
 ```
 
+### Supabase catalog foundation
+
+Copy `.env.example` to `.env.local`, then set `DATABASE_URL` to the Supabase
+transaction pooler URL (port `6543`) and `DIRECT_URL` to the session pooler or
+direct URL (port `5432`). Keep the database password out of source control.
+Generate and validate the Prisma client/schema with:
+
+```bash
+npm run db:validate
+npm run db:generate
+```
+
+After verifying that the configured project is the intended development
+project, apply database migrations with `npm run db:migrate:deploy`. The initial
+Prisma migration installs the UUIDv7 generator and creates the catalog tables
+with row-level security enabled. RLS is default-deny until the API layer adds
+explicitly scoped access.
+
+Apply the matching Supabase migration after Prisma so both migration histories
+stay aligned:
+
+```bash
+supabase db push
+```
+
+The storefront must access catalog data through the API; it must not query
+Supabase directly. The current starter does not yet contain that API workspace,
+so this step creates the database foundation, append-only product approval
+history, and documented category/Unbranded reference rows without presenting
+product data as available in the storefront.
+Vendor data, product approval, Storage buckets/policies, catalog API routes, and
+catalog search are not part of this initial schema.
+
 The complete production setup, environment variables, architecture, testing, security, and deployment procedures are documented in the [Developer Handbook](PROJECT%20DOCUMENTATIONS/00_DEVELOPER_HANDBOOK.md).

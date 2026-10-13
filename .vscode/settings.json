@@ -1,0 +1,33 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "printf": true,
+        "/^node -e 'const fs=require\\(\"fs\"\\); for \\(const line of fs\\.readFileSync\\(\"\\.env\",\"utf8\"\\)\\.split\\(/\\\\r\\?\\\\n/\\)\\) \\{ const m=line\\.match\\(/\\^\\(\\[A-Za-z_\\]\\[A-Za-z0-9_\\]\\*\\)\\\\s\\*\\[:=\\]\\\\s\\*\\[\"'\"'\"'\\]\\?\\(\\[\\^\"'\"'\"'\\]\\*\\)/\\); if\\(!m\\) continue; const \\[_,k,v\\]=m; if\\(\\[\"SUPABASE_URL\",\"SUPABASE_PUBLISHABLE_KEY\",\"SUPABASE_SERVICE_ROLE_KEY\",\"DATABASE_URL\",\"DIRECT_URL\"\\]\\.includes\\(k\\)\\) console\\.log\\(k, k\\.endsWith\\(\"URL\"\\) \\? \\(/\\^https\\?:\\\\/\\\\//\\.test\\(v\\) \\? \"valid URL format\" : v\\.includes\\(\"YOUR-PASSWORD\"\\) \\? \"placeholder\" : \"non-http value\"\\) : \\(/\\\\\\*\\{3\\}/\\.test\\(v\\) \\? \"masked\" : v\\.length > 20 \\? \"present\" : \"short or empty\"\\)\\); \\}'$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "command": true,
+        "supabase": true,
+        "npm install": true,
+        "/^npm ls @supabase/supabase-js --depth=0 && node -p 'require\\(\"\\./node_modules/@supabase/supabase-js/package\\.json\"\\)\\.engines'$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --version$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "npm run lint": true,
+        "npm run build": true,
+        "git check-ignore": true,
+        "true": true,
+        "/^python - <<'PY'\nfrom pathlib import Path\np=Path\\('/home/codespace/\\.vscode-remote/data/agentSessionData/bfb18f69-179b-42ff-bd24-c092c8920944/attachments/58462147-8009-4a5c-814d-4516d3efcbed/file_\\.env'\\)\nfor line in p\\.read_text\\(\\)\\.splitlines\\(\\):\n    if '=' not in line and ':' not in line: continue\n    sep='=' if '=' in line else ':'\n    key,val=line\\.split\\(sep,1\\)\n    key=key\\.strip\\(\\)\n    val=val\\.strip\\(\\)\\.strip\\('\"\\\\''\\)\n    if key in \\{'DATABASE_URL','DIRECT_URL','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY'\\}:\n        valid = \\('http://' in val or 'https://' in val\\) if key\\.endswith\\('URL'\\) and key not in \\{'DATABASE_URL','DIRECT_URL'\\} else \\(val\\.startswith\\('postgresql://'\\) if key in \\{'DATABASE_URL','DIRECT_URL'\\} else \\(len\\(val\\)>20 and '\\*\\*\\*' not in val\\)\\)\n        placeholder=any\\(x in val for x in \\('YOUR-PASSWORD','your-project','\\*\\*\\*\\*\\*\\*','<','>'\\)\\)\n        print\\(f'\\{key\\}: \\{\"configured format\" if valid and not placeholder else \"placeholder/masked/invalid\"\\}'\\)\nPY\nprintf '\\\\nLocal env presence \\(values hidden\\):\\\\n'; python - <<'PY'\nfrom pathlib import Path\np=Path\\('\\.env'\\)\nfor line in p\\.read_text\\(\\)\\.splitlines\\(\\):\n    if '=' not in line: continue\n    k,v=line\\.split\\('=',1\\)\n    if k in \\{'DATABASE_URL','DIRECT_URL','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY'\\}:\n      v=v\\.strip\\(\\)\\.strip\\('\"\\\\''\\)\n      print\\(f'\\{k\\}: \\{\"configured format\" if v and \"YOUR-PASSWORD\" not in v and \"\\*\\*\\*\\*\\*\\*\" not in v else \"placeholder/masked/empty\"\\}'\\)\nPY$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^command -v psql \\|\\| true; command -v docker \\|\\| true; command -v supabase \\|\\| true; node --version$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "npm run db:generate": true
+    }
+}

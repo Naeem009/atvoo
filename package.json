@@ -2,11 +2,18 @@
   "name": "atvoo",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/database"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "npm run generate --workspace=@imtiaz-mart/database",
+    "db:validate": "npm run validate --workspace=@imtiaz-mart/database",
+    "db:migrate:deploy": "npm run migrate:deploy --workspace=@imtiaz-mart/database",
+    "db:test": "npm run test --workspace=@imtiaz-mart/database"
   },
   "dependencies": {
     "next": "16.4.0",

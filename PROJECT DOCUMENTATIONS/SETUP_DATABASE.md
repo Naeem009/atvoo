@@ -2,6 +2,29 @@
 
 PostgreSQL, Redis, and Elasticsearch run via Docker Compose.
 
+## Current repository implementation
+
+The starter repository currently includes only the Prisma catalog foundation
+(`vendors`, `categories`, `brands`, `products`, `product_approvals`,
+`product_variants`, and `product_images`), not the full database history or
+Docker Compose services described below. Available root commands are:
+
+```bash
+npm run db:validate
+npm run db:generate
+npm run db:test
+npm run db:migrate:deploy
+```
+
+The initial migration creates those tables, applies default-deny RLS and
+catalog publication constraints, and inserts the documented category taxonomy
+and `Unbranded` reference brand. It does not provision Storage buckets,
+application roles, or product data.
+Configure and verify the development database URLs before running
+`db:migrate:deploy`. Then run `supabase db push` to apply the matching Supabase
+RLS migration. Migrations have not been applied to the linked remote project
+by this repository setup.
+
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
@@ -50,6 +73,7 @@ Copy both from **Project Settings → Database**. Keep `schema=public` (default 
 
 ```bash
 npm run db:migrate:deploy
+supabase db push
 ```
 
 Enable the vector extension in the Supabase SQL editor if embeddings are used:
