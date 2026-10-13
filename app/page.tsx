@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 const categories = [
   {
@@ -48,9 +49,9 @@ export default function Home() {
           <a href="#categories">Explore categories</a>
           <a href="#our-point-of-view">Our point of view</a>
         </nav>
-        <a className="header-action" href="#categories">
+        <Link className="header-action" href="/products">
           Explore <span aria-hidden="true">↗</span>
-        </a>
+        </Link>
       </header>
 
       <main id="main-content">
@@ -73,9 +74,9 @@ export default function Home() {
               Find the things that make a place, a day, or a whole life feel more
               like yours.
             </p>
-            <a className="button button-light" href="#categories">
+            <Link className="button button-light" href="/products">
               Find your corner <span aria-hidden="true">↘</span>
-            </a>
+            </Link>
           </div>
           <p className="hero-caption">Independent finds. Everyday favorites.</p>
         </section>
@@ -117,9 +118,9 @@ export default function Home() {
             <h2>
               The best finds aren&apos;t always the ones you were looking for.
             </h2>
-            <a className="text-link" href="#categories">
+            <Link className="text-link" href="/products">
               Take a look around <span aria-hidden="true">↗</span>
-            </a>
+            </Link>
           </div>
           <div className="manifesto-art" aria-hidden="true">
             <Image

@@ -16,9 +16,12 @@ gate remains open. The current source is
 a root-level Next.js storefront (`app/`) plus a small NestJS API workspace
 (`apps/api/`) and a Prisma catalog workspace (`packages/database/`). The API
 implements public product listing/search/detail, categories, and brands. It
-does not yet power the storefront: the only Next.js page is the homepage, and
-there are no catalog product pages, search/filter UI, JSON-LD, sitemap, robots,
-or other no-JS catalog SEO surfaces.
+now powers server-rendered `/products` search/filter/pagination and
+`/products/[slug]` detail pages. Product details include dynamic metadata and
+Product/Offer JSON-LD; the app exposes `robots.txt` and an API-backed
+`sitemap.xml`. The listings and filters work without client-side JavaScript.
+Remaining Phase 2 work includes broader accessibility/responsive review and
+the rest of the documented discovery experience; checkout is not implemented.
 
 The catalog schema, three Prisma migrations, matching Supabase SQL migrations,
 API build/tests, schema validation, migration-contract tests, lint, and
@@ -392,6 +395,7 @@ boundaries below remain target architecture.
 1. Choose a disposable local PostgreSQL 17 database or a Supabase development project. Current catalog migrations manage the required search extensions; `pgvector` is not used by the current implementation.
 2. Configure `DATABASE_URL` for API runtime and `DIRECT_URL` for Prisma CLI migrations. Do not put real credentials in source control.
 3. Configure `SUPABASE_URL` and `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` for the current catalog API. The current API constructs public media URLs; it does not upload files or provision buckets.
+4. Configure server-side `API_BASE_URL` to the NestJS base URL ending in `/api/v1`. For a local API, use `http://localhost:3001/api/v1`. Set server-only `APP_URL` to the storefront origin for sitemap and crawler metadata; it is read at request time and must not be prefixed with `NEXT_PUBLIC_`.
 
 ```bash
 cp .env.example .env
@@ -476,11 +480,14 @@ provider credentials.
 | `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` | API startup / media URL construction | Required by API | Bucket name used when forming product image URLs. This does not provision the bucket or implement uploads. |
 | `CORS_ORIGIN` | API | Optional | Comma-separated allowed origins; if unset, CORS origins are disabled. |
 | `API_PORT` | API | Optional | Defaults to `3001`. |
+| `API_BASE_URL` | Next.js server | Optional | Defaults to `http://localhost:3001/api/v1`; set to the reachable API origin in deployment. Never prefix with `NEXT_PUBLIC_`. |
+| `APP_URL` | Next.js sitemap/robots | Optional | Defaults to `http://localhost:3000`; set to the canonical public storefront origin. Server-only so a promoted build can use its runtime origin. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Not currently consumed | No | Present as an empty placeholder in `.env.example`; any future use must remain server-only and must not bypass intended authorization. |
 
-The root Next.js homepage does not currently require an API URL or Supabase
-credential. The API does not yet implement project-ref matching or production
-placeholder checks.
+The root Next.js homepage does not require API connectivity. Catalog pages
+require the API to be reachable through `API_BASE_URL`; API failures render an
+explicit retry state. The API does not implement project-ref matching or
+production placeholder checks.
 
 ### 4.2 Environments and project separation
 
