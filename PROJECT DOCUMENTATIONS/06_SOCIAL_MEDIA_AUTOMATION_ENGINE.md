@@ -1,13 +1,87 @@
 # SOCIAL MEDIA AUTOMATION ENGINE (SMAE)
 ## Master Specification — Vendor Automation + Marketplace Campaigns + n8n
 
-**Status:** Target-state source of truth  
+**Status:** Target-state source of truth (revision 2: implementation addendum added; citation artifacts removed)
 **Module:** Social Media Automation Engine (SMAE)  
 **Primary orchestrator:** n8n  
 **Application owner:** ATVOO API/backend  
 **Database:** Supabase PostgreSQL through the application data layer  
 
 > **Core rule:** ATVOO owns business truth. n8n orchestrates work. Social platforms own final publication and provider metrics.
+
+
+---
+
+# IMPLEMENTATION ADDENDUM — REVISION 2 (BINDING)
+
+Added to remove implementation ambiguity and to reconcile this spec with the handbook, 08 and 09. Where this addendum is more specific than the numbered sections below, **this addendum wins**; it never weakens a non-negotiable principle.
+
+## A1. Autonomy modes ("fully automatic" defined)
+
+Per vendor, per platform, per rule: `autonomy ∈ { MANUAL, APPROVAL_REQUIRED, FULLY_AUTOMATIC }`.
+
+| Mode | Behaviour |
+|---|---|
+| `MANUAL` | Platform drafts content; vendor publishes via "Share to Social" (Web Share/deep link/download kit). No API publishing. Always available (entitlement `social.manual_publish`). |
+| `APPROVAL_REQUIRED` (**default for every new rule**) | Full pipeline runs; post stops at `APPROVAL_REQUIRED`; vendor approves/edits/rejects (push + email notification, approve-by-link allowed with signed one-time token). |
+| `FULLY_AUTOMATIC` | Full pipeline to `PUBLISHED` without a human step. |
+
+`FULLY_AUTOMATIC` may be enabled only when **all** hold: explicit vendor confirmation (modal text stored with timestamp/IP/user); entitlements `social.automation.enabled` + `social.ai_generation` (+ `social.best_time` for BEST_TIME); social account healthy (token valid, scopes verified, `last_validated_at` < 24h); vendor has ≥ 10 previously approved posts on that platform with ≥ 90% approved-without-edit (or admin grants `trusted_automation` flag); moderation result is exactly `PASSED`; final pre-publish gate (§18) passes; frequency/cooldown/blackout satisfied; global and per-platform kill switches off; vendor not on probation/suspended. Anything else (`PASSED_WITH_WARNINGS`, `REQUIRES_HUMAN_REVIEW`, `BLOCKED`, first-time product category, price/discount claims over threshold, sponsored content) **downgrades that post to approval-required**, never publishes. Downgrades are logged with reason.
+**Marketplace-owned (Mode B):** fully automatic is allowed from launch for curated, rules-based content types (new arrivals, best sellers, category spotlights) once a Marketing Manager activates the rule; sponsored/paid-slot posts always require approval.
+
+## A2. Launch defaults (all configurable; stored as `PlatformSettings`/rule defaults)
+
+| Control | Vendor channel | Store channel |
+|---|---|---|
+| Posts/day/platform | 2 | 3 (≥ 2 h spacing) |
+| Product cooldown | 72 h | 7 days |
+| Same vendor on store channel | – | ≤ 1 post/vendor/day, fairness report weekly |
+| Blackout (vendor/store local time) | 23:00–07:00 | 23:00–07:00 |
+| Identical/near-duplicate content window | 30 days | 30 days |
+| Max retries (publish) | 5 | 5 |
+| Auto-publish default | OFF (APPROVAL_REQUIRED) | ON for curated types |
+| Initial launch platforms | Facebook + Instagram (Meta) | Facebook + Instagram |
+| Pause-all kill switch | vendor + admin | admin |
+
+## A3. Provider-approval fallback (do not block launch)
+
+Meta publishing permissions require App Review/Business Verification (days to weeks). Until approved: (1) Mode B can run on **ATVOO-owned** Pages/IG accounts using the app in development mode with app roles on those accounts (verify current Meta rules); (2) Mode A runs in `MANUAL` assisted mode; (3) feature flags `social.<platform>.enabled` stay OFF for vendors until the provider approval for that platform is recorded in `SocialPlatformApprovals` (platform, permission set, approved_at, evidence ref). The same pattern applies to every platform (TikTok audit, Pinterest Standard access, X tier, GBP access). Never use a staging/dev provider app for production vendor accounts.
+
+## A4. Outbox and webhook signing (concrete)
+
+- Table `OutboxEvents`; worker `outbox-dispatcher` claims rows with `FOR UPDATE SKIP LOCKED`, delivers to n8n webhook, marks `DELIVERED` on 2xx. Retry schedule 1 m → 5 m → 15 m → 1 h → 6 h (max 10 attempts, jitter ±20%), then `DEAD` + alert. Ordering guaranteed per `(vendorId, aggregateId)` key; retries reuse `event_id`.
+- Signature headers (both directions): `X-ATVOO-Event-Id`, `X-ATVOO-Timestamp` (unix s), `X-ATVOO-Nonce`, `X-ATVOO-Signature: v1=<hex HMAC-SHA256(secret, timestamp + "." + nonce + "." + rawBody)>`. Reject if |now − timestamp| > 300 s or nonce reused (Redis 10 min). Secrets per environment, rotated with overlap window (accept `v1` from two active secrets).
+- n8n → ATVOO calls `/api/v1/internal/*` with `X-Service-Key` (scope `smae:workflow`) + signature; per-workflow keys; least privilege; all calls idempotent via `Idempotency-Key = event_id + step`.
+
+## A5. Retry classification (concrete)
+
+Retry with backoff: network errors, timeouts, HTTP 429 (honour `Retry-After`), 5xx, provider "temporarily unavailable". Do **not** retry: 400/422 validation, policy/content rejections, 401/403 permission (→ `REQUIRES_REAUTH`), media-format errors (→ re-render once, then fail), duplicate-post detection. Delay 30 s, 2 m, 10 m, 1 h, 4 h; after final failure → `FAILED` + vendor notification + DLQ record with `safe_error_message`. Publish after timeout with unknown outcome → reconcile with provider (lookup by idempotency/external id) **before** any retry.
+
+## A6. AI generation specifics
+
+- `AiProvider` interface (provider-agnostic; model/version recorded on every generation in `SocialContentProvenance`). Prompt templates versioned in `PromptTemplates` (id, version, platform, language, tone, JSON schema, eval set id). Temperature ≤ 0.4 for factual captions. Structured JSON output validated against schema; invalid → one repair attempt → else `BLOCKED`.
+- Inputs exclude PII, credentials, internal margins/costs and unapproved claims. Vendor-supplied text is delimited and treated as data (prompt-injection defence); output scanned for URLs not in allow-list, price/discount numbers (must equal revalidated facts), prohibited terms, medical/legal/guarantee claims.
+- Budgets: per-vendor and global monthly AI cost caps with 80% alert and 100% degrade to `MANUAL`; per-post token cap.
+- Languages at launch: English (+ transliterated Urdu hashtags optional); Urdu script generation Phase 2 after native-speaker evaluation.
+- AI-generated media (if ever used) must be labelled per platform policy; launch uses real product media only.
+
+## A7. n8n operations (concrete)
+
+- One n8n workspace per environment (dev/staging/prod; n8n Cloud default — handbook §0.1). Workflow JSON exported to `workflows/n8n/<env-agnostic>/WF-xx-name.json` on every change; CI validates JSON, forbids embedded secrets/credentials IDs of the wrong environment, and imports to staging automatically; production import is a manual-approval step. `workflow_version` = git SHA tag written to `SocialWorkflowRuns`.
+- Every workflow has an **error workflow** (notifies, writes failure to API, never swallows). Execution data retention ≤ 7 days, "save execution data" off for success in prod, sensitive nodes with data redaction. n8n security audit run monthly. Credentials stored only in n8n's encrypted credential store and referenced by name; OAuth refresh handled by ATVOO API (not by n8n) so tokens never rest in n8n.
+- Capacity: queue mode (workers) when > 1,000 executions/day; concurrency limits per platform to respect provider rate limits.
+
+## A8. Content and compliance defaults
+
+Caption must include product URL with UTM (§33), brand mention rules per platform, `#ad`/paid-partnership label for sponsored slots, no engagement-bait, no spam hashtags (≤ 5 on Instagram/Facebook unless rule says otherwise; Pinterest keywords not hashtags), no price unless revalidated within 5 minutes of publish, never publish out-of-stock/draft/unapproved products. Vendor Seller Agreement includes licence for promotion and AI-derived content (08 §19). Takedown: vendor or admin can retract/delete a published post from the UI (provider delete call where supported, otherwise guided manual removal task).
+
+## A9. Observability and audit alignment
+
+Metric names follow §46 and are exported to the shared Grafana stack (09 §7); audit event names follow §45 and are stored in `AuditLogs` with `correlation_id` = outbox `event_id`. DLQ count > 0 for 15 min pages on-call. Weekly SMAE health report (publish success rate per platform, approval latency, moderation block reasons, token-expiry forecast) is emailed to the Marketing Manager.
+
+## A10. Testing additions
+
+Provider calls are behind adapter interfaces with recorded fixtures for CI; staging uses real provider **test** accounts/apps only; one full-path E2E per platform: `product approved → outbox → n8n (staging) → eligibility → AI (stub + live smoke) → moderation → approval/auto → schedule → publish (test account) → status webhook → analytics snapshot`. Chaos tests: n8n down (events queue and recover), provider 429 storm, token revoked mid-flow, duplicate webhook storm, product deleted/price changed between draft and publish.
 
 ---
 
