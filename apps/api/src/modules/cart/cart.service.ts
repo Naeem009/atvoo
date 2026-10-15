@@ -9,6 +9,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../database/prisma.service";
+import { calculateAvailableStock } from "../orders/inventory";
 
 const cartInclude = {
   items: {
@@ -85,7 +86,28 @@ export class CartService {
           },
         });
       }
-      return { sessionId: resolvedSessionId, data: this.serializeCart(cart) };
+      const variantIds = cart.items.map((item) => item.productVariant.id);
+      const reservations = variantIds.length
+        ? await this.prisma.stockReservation.groupBy({
+            by: ["productVariantId"],
+            where: {
+              productVariantId: { in: variantIds },
+              status: "ACTIVE",
+              expiresAt: { gt: new Date() },
+            },
+            _sum: { quantity: true },
+          })
+        : [];
+      const reservedByVariant = new Map(
+        reservations.map((reservation) => [
+          reservation.productVariantId,
+          reservation._sum.quantity ?? 0,
+        ]),
+      );
+      return {
+        sessionId: resolvedSessionId,
+        data: this.serializeCart(cart, reservedByVariant),
+      };
     } catch (error) {
       this.handleDatabaseError(error, "Could not load the guest cart.");
     }
@@ -260,7 +282,6 @@ export class CartService {
         id: variantId,
         status: "ACTIVE",
         deletedAt: null,
-        stock: { gt: 0 },
         product: {
           status: "ACTIVE",
           approvalStatus: { in: ["APPROVED", "AUTO_APPROVED"] },
@@ -273,16 +294,37 @@ export class CartService {
       },
       select: { id: true, price: true, currency: true, stock: true },
     });
-    return variant
-      ? { ...variant, currency: variant.currency.trim() }
-      : null;
+    if (!variant) return null;
+    const reservations = await transaction.stockReservation.aggregate({
+      where: {
+        productVariantId: variant.id,
+        status: "ACTIVE",
+        expiresAt: { gt: new Date() },
+      },
+      _sum: { quantity: true },
+    });
+    return {
+      ...variant,
+      currency: variant.currency.trim(),
+      stock: calculateAvailableStock(
+        variant.stock,
+        reservations._sum.quantity ?? 0,
+      ),
+    };
   }
 
-  private serializeCart(cart: CartWithItems) {
+  private serializeCart(
+    cart: CartWithItems,
+    reservedByVariant: ReadonlyMap<string, number>,
+  ) {
     const totals = new Map<string, bigint>();
     const items = cart.items.map((item) => {
       const variant = item.productVariant;
       const product = variant.product;
+      const availableStock = calculateAvailableStock(
+        variant.stock,
+        reservedByVariant.get(variant.id) ?? 0,
+      );
       const sellable =
         variant.status === "ACTIVE" &&
         variant.deletedAt === null &&
@@ -300,10 +342,10 @@ export class CartService {
         item.unitPrice !== variant.price || item.currency.trim() !== currency;
       const warnings: string[] = [];
       if (!sellable) warnings.push("This product is no longer available.");
-      if (variant.stock < item.quantity) {
+      if (availableStock < item.quantity) {
         warnings.push(
-          variant.stock > 0
-            ? `Only ${variant.stock} remain in stock.`
+          availableStock > 0
+            ? `Only ${availableStock} remain in stock.`
             : "This product is out of stock.",
         );
       }
@@ -324,8 +366,8 @@ export class CartService {
             }
           : null,
         quantity: item.quantity,
-        stock: variant.stock,
-        available: sellable && variant.stock >= item.quantity,
+        stock: availableStock,
+        available: sellable && availableStock >= item.quantity,
         warnings,
         price: { amount: variant.price.toString(), currency },
         previousPrice: priceChanged

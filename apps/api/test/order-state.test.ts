@@ -8,6 +8,7 @@ import {
   type OrderStatus,
   type ShipmentStatus,
 } from "../src/modules/orders/order-state";
+import { calculateAvailableStock } from "../src/modules/orders/inventory";
 
 test("order transitions follow the documented payment and fulfilment path", () => {
   const allowedTransitions: readonly [OrderStatus, OrderStatus][] = [
@@ -84,4 +85,10 @@ test("shipment transitions reject skipped, repeated, and unspecified exception c
       }
     }
   }
+});
+
+test("available stock subtracts active reservations without going below zero", () => {
+  assert.equal(calculateAvailableStock(10, 3), 7);
+  assert.equal(calculateAvailableStock(4, 4), 0);
+  assert.equal(calculateAvailableStock(2, 5), 0);
 });
