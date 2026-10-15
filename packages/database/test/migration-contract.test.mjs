@@ -72,6 +72,76 @@ const supabaseOrderMigration = readFileSync(
   ),
   "utf8",
 );
+const shippingTaxMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015130000_shipping_tax_configuration/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseShippingTaxMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015130000_shipping_tax_configuration.sql",
+  ),
+  "utf8",
+);
+const quoteMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015140000_checkout_quotes/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseQuoteMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015140000_checkout_quotes.sql",
+  ),
+  "utf8",
+);
+const orderSequenceMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015150000_order_sequence/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseOrderSequenceMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015150000_order_sequence.sql",
+  ),
+  "utf8",
+);
+const orderChargeMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015160000_order_charge_breakdown/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseOrderChargeMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015160000_order_charge_breakdown.sql",
+  ),
+  "utf8",
+);
+const orderTrackingMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015170000_order_tracking_token/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseOrderTrackingMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015170000_order_tracking_token.sql",
+  ),
+  "utf8",
+);
 const supabaseProductSearchMigration = readFileSync(
   resolve(
     packageRoot,
@@ -225,4 +295,69 @@ test("order foundation stays aligned with Supabase and enables default-deny RLS"
   assert.match(schema, /model StockReservation \{/);
   assert.match(schema, /model IdempotencyKey \{/);
   assert.doesNotMatch(orderMigration, /CREATE POLICY/i);
+});
+
+test("shipping and tax configuration stays aligned and default-deny", () => {
+  assert.equal(shippingTaxMigration, supabaseShippingTaxMigration);
+  const tables = [...shippingTaxMigration.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
+    ([, table]) => table,
+  );
+  assert.deepEqual(tables, [
+    "shipping_profiles",
+    "shipping_zones",
+    "shipping_rates",
+    "tax_rates",
+  ]);
+
+  for (const table of tables) {
+    assert.match(
+      shippingTaxMigration,
+      new RegExp(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`),
+      `${table} must enable RLS in its creation migration`,
+    );
+  }
+  assert.match(shippingTaxMigration, /shipping_rates_fields_check/);
+  assert.match(shippingTaxMigration, /tax_rates_validity_check/);
+  assert.match(shippingTaxMigration, /shipping_profiles_handling_days_check/);
+  assert.match(schema, /model ShippingProfile \{/);
+  assert.match(schema, /model ShippingZone \{/);
+  assert.match(schema, /model ShippingRate \{/);
+  assert.match(schema, /model TaxRate \{/);
+  assert.doesNotMatch(shippingTaxMigration, /INSERT INTO "(?:shipping_|tax_)/i);
+});
+
+test("checkout quote snapshots are cart-bound, expiring, and default-deny", () => {
+  assert.equal(quoteMigration, supabaseQuoteMigration);
+  assert.match(quoteMigration, /FOREIGN KEY \("cart_id"\) REFERENCES "carts"\("id"\)/);
+  assert.match(quoteMigration, /checkout_quotes_request_hash_check/);
+  assert.match(quoteMigration, /checkout_quotes_expiry_check/);
+  assert.match(quoteMigration, /checkout_quotes_cart_id_expires_at_idx/);
+  assert.match(quoteMigration, /ALTER TABLE "checkout_quotes" ENABLE ROW LEVEL SECURITY/);
+  assert.match(schema, /model CheckoutQuote \{/);
+});
+
+test("order number sequence is mirrored and protected by RLS", () => {
+  assert.equal(orderSequenceMigration, supabaseOrderSequenceMigration);
+  assert.match(orderSequenceMigration, /ALTER TABLE "checkout_quotes"[\s\S]*"consumed_at"/);
+  assert.match(orderSequenceMigration, /CREATE TABLE "order_number_counters"/);
+  assert.match(orderSequenceMigration, /order_number_counters_next_value_check/);
+  assert.match(orderSequenceMigration, /ALTER TABLE "order_number_counters" ENABLE ROW LEVEL SECURITY/);
+  assert.match(schema, /model OrderNumberCounter \{/);
+  assert.match(schema, /consumedAt\s+DateTime\?/);
+});
+
+test("order charge breakdown is mirrored and nonnegative", () => {
+  assert.equal(orderChargeMigration, supabaseOrderChargeMigration);
+  assert.match(orderChargeMigration, /shipments_shipping_amount_check/);
+  assert.match(orderChargeMigration, /shipments_tax_amount_check/);
+  assert.match(orderChargeMigration, /order_items_tax_amount_check/);
+  assert.match(schema, /shippingAmount BigInt/);
+  assert.match(schema, /taxAmount\s+BigInt/);
+});
+
+test("guest tracking tokens are stored as a unique nullable hash", () => {
+  assert.equal(orderTrackingMigration, supabaseOrderTrackingMigration);
+  assert.match(orderTrackingMigration, /ADD COLUMN "tracking_token_hash" CHAR\(64\)/);
+  assert.match(orderTrackingMigration, /orders_tracking_token_hash_key/);
+  assert.match(schema, /trackingTokenHash\s+String\?/);
 });

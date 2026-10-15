@@ -118,13 +118,13 @@ export declare class CatalogService {
     listCategories(): Promise<{
         data: {
             id: string;
+            name: string;
             _count: {
                 products: number;
             };
-            parentId: string | null;
-            name: string;
             slug: string;
             description: string | null;
+            parentId: string | null;
             displayOrder: number;
         }[];
     }>;

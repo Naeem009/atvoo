@@ -10,12 +10,14 @@ exports.ApiModule = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_module_1 = require("./database/prisma.module");
 const catalog_module_1 = require("./catalog/catalog.module");
+const cart_module_1 = require("./cart/cart.module");
+const checkout_module_1 = require("./checkout/checkout.module");
 let ApiModule = class ApiModule {
 };
 exports.ApiModule = ApiModule;
 exports.ApiModule = ApiModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, catalog_module_1.CatalogModule],
+        imports: [prisma_module_1.PrismaModule, catalog_module_1.CatalogModule, cart_module_1.CartModule, checkout_module_1.CheckoutModule],
     })
 ], ApiModule);
 //# sourceMappingURL=api.module.js.map

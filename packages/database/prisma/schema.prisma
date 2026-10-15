@@ -98,6 +98,21 @@ enum StockReservationStatus {
   @@map("stock_reservation_status")
 }
 
+enum ShippingRateType {
+  FLAT
+  FREE_OVER_THRESHOLD
+  WEIGHT_BASED
+
+  @@map("shipping_rate_type")
+}
+
+enum TaxTreatment {
+  INCLUSIVE
+  EXCLUSIVE
+
+  @@map("tax_treatment")
+}
+
 model Vendor {
   id          String           @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
   displayName String           @map("display_name") @db.VarChar(160)
@@ -109,6 +124,7 @@ model Vendor {
   variants    ProductVariant[]
   orderItems  OrderItem[]
   shipments   Shipment[]
+  shippingProfiles ShippingProfile[]
 
   @@index([status])
   @@map("vendors")
@@ -136,6 +152,73 @@ model Category {
   @@index([parentId, displayOrder])
   @@index([isActive, displayOrder])
   @@map("categories")
+}
+
+model ShippingProfile {
+  id           String         @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  vendorId     String         @map("vendor_id") @db.Uuid
+  name         String         @db.VarChar(120)
+  carrierName  String         @map("carrier_name") @db.VarChar(100)
+  shippingTaxClass String     @map("shipping_tax_class") @db.VarChar(50)
+  handlingDays Int            @map("handling_days")
+  transitDays  Int            @map("transit_days")
+  codAllowed   Boolean        @default(false) @map("cod_allowed")
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  vendor       Vendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  zones        ShippingZone[]
+
+  @@unique([vendorId, name])
+  @@index([vendorId, isActive])
+  @@map("shipping_profiles")
+}
+
+model ShippingZone {
+  id                String          @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  shippingProfileId String          @map("shipping_profile_id") @db.Uuid
+  province          String          @db.VarChar(100)
+  city              String          @db.VarChar(100)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  profile           ShippingProfile @relation(fields: [shippingProfileId], references: [id], onDelete: Cascade)
+  rate              ShippingRate?
+
+  @@unique([shippingProfileId, province, city])
+  @@index([province, city])
+  @@map("shipping_zones")
+}
+
+model ShippingRate {
+  id                  String           @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  shippingZoneId      String           @unique @map("shipping_zone_id") @db.Uuid
+  type                ShippingRateType
+  amount              BigInt?
+  freeAboveAmount     BigInt?          @map("free_above_amount")
+  baseAmount          BigInt?          @map("base_amount")
+  amountPerKilogram   BigInt?          @map("amount_per_kilogram")
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  zone                ShippingZone     @relation(fields: [shippingZoneId], references: [id], onDelete: Cascade)
+
+  @@map("shipping_rates")
+}
+
+model TaxRate {
+  id          String       @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  countryCode String       @map("country_code") @db.Char(2)
+  province    String       @db.VarChar(100)
+  taxClass    String       @map("tax_class") @db.VarChar(50)
+  rateBps     Int          @map("rate_bps")
+  treatment   TaxTreatment
+  isActive    Boolean      @default(true) @map("is_active")
+  validFrom   DateTime     @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validUntil  DateTime?    @map("valid_until") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([countryCode, province, taxClass, validFrom])
+  @@index([countryCode, province, taxClass, isActive, validFrom])
+  @@map("tax_rates")
 }
 
 model Brand {
@@ -242,6 +325,7 @@ model Cart {
   createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   items     CartItem[]
+  checkoutQuotes CheckoutQuote[]
 
   @@index([expiresAt])
   @@map("carts")
@@ -264,9 +348,32 @@ model CartItem {
   @@map("cart_items")
 }
 
+model CheckoutQuote {
+  id           String   @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  cartId       String   @map("cart_id") @db.Uuid
+  requestHash  String   @map("request_hash") @db.VarChar(64)
+  snapshot     Json     @db.JsonB
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+  consumedAt   DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  cart         Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@index([cartId, expiresAt])
+  @@index([expiresAt])
+  @@map("checkout_quotes")
+}
+
+model OrderNumberCounter {
+  period    String @id @db.Char(4)
+  nextValue BigInt @default(1) @map("next_value")
+
+  @@map("order_number_counters")
+}
+
 model Order {
   id                    String      @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
   orderNumber           String      @unique @map("order_number") @db.VarChar(20)
+  trackingTokenHash     String?     @unique @map("tracking_token_hash") @db.Char(64)
   buyerEmail            String      @map("buyer_email") @db.VarChar(254)
   buyerPhone            String      @map("buyer_phone") @db.VarChar(30)
   recipientName         String      @map("recipient_name") @db.VarChar(160)
@@ -299,6 +406,9 @@ model Shipment {
   orderId       String         @map("order_id") @db.Uuid
   vendorId      String         @map("vendor_id") @db.Uuid
   status        ShipmentStatus @default(PENDING)
+  shippingAmount BigInt        @default(0) @map("shipping_amount")
+  taxAmount      BigInt         @default(0) @map("tax_amount")
+  currency       String         @default("PKR") @db.Char(3)
   trackingNumber String?       @map("tracking_number") @db.VarChar(100)
   carrier       String?        @db.VarChar(100)
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -324,6 +434,7 @@ model OrderItem {
   variantSku       String         @map("variant_sku") @db.VarChar(100)
   quantity         Int
   unitPrice        BigInt         @map("unit_price")
+  taxAmount        BigInt         @default(0) @map("tax_amount")
   currency         String         @db.Char(3)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   order            Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)

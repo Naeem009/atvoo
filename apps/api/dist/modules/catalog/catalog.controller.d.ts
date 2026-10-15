@@ -35,7 +35,7 @@ export declare class CatalogController {
                 compareAtPrice: string | null;
                 stock: number;
                 gtin: string | null;
-                options: import("@prisma/client/runtime/library").JsonValue;
+                options: import(".prisma/client/runtime/library").JsonValue;
                 weightGrams: number | null;
                 dimensionsCm: {
                     length: string | null;
@@ -93,7 +93,7 @@ export declare class CatalogController {
                 compareAtPrice: string | null;
                 stock: number;
                 gtin: string | null;
-                options: import("@prisma/client/runtime/library").JsonValue;
+                options: import(".prisma/client/runtime/library").JsonValue;
                 weightGrams: number | null;
                 dimensionsCm: {
                     length: string | null;
@@ -151,7 +151,7 @@ export declare class CatalogController {
                 compareAtPrice: string | null;
                 stock: number;
                 gtin: string | null;
-                options: import("@prisma/client/runtime/library").JsonValue;
+                options: import(".prisma/client/runtime/library").JsonValue;
                 weightGrams: number | null;
                 dimensionsCm: {
                     length: string | null;
@@ -174,13 +174,13 @@ export declare class CatalogController {
     listCategories(ifNoneMatch: string | undefined, response: Response): Promise<{
         data: {
             id: string;
+            name: string;
             _count: {
                 products: number;
             };
-            parentId: string | null;
-            name: string;
             slug: string;
             description: string | null;
+            parentId: string | null;
             displayOrder: number;
         }[];
     } | undefined>;
