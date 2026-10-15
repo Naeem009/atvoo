@@ -1131,6 +1131,7 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 | API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
 | Storefront catalog integration and discovery | Implemented; Phase 2 gate passed | `app/` server-renders API-backed catalog pages; `npm run test:storefront` verifies no-JS HTML, filters, metadata/JSON-LD, crawler surfaces, not-found behavior, and selected accessibility checks. This is not automated browser accessibility certification. |
 | Guest cart | Implemented foundation; Phase 3 in progress | Persistent guest cart, 30-day session, stock/publication checks, price/stock warnings, same-origin HttpOnly-cookie proxy, variant selection and cart UI. Cart operations do not reserve stock; hosted database integration is unverified. |
+| Order/shipment lifecycle rules | Partial | Framework-free transition rules and tests cover the documented payment and fulfilment happy paths. Cancellation/refund edges and shipment exception/retry transitions remain unspecified and are rejected. |
 | Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
 | Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
 | Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
