@@ -58,6 +58,20 @@ const supabaseCartMigration = readFileSync(
   ),
   "utf8",
 );
+const orderMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261015120000_order_foundation/migration.sql",
+  ),
+  "utf8",
+);
+const supabaseOrderMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261015120000_order_foundation.sql",
+  ),
+  "utf8",
+);
 const supabaseProductSearchMigration = readFileSync(
   resolve(
     packageRoot,
@@ -175,4 +189,40 @@ test("guest cart migration stays aligned with Supabase and enforces its limits",
   assert.doesNotMatch(cartMigration, /CREATE POLICY/i);
   assert.match(schema, /model Cart \{/);
   assert.match(schema, /model CartItem \{/);
+});
+
+test("order foundation stays aligned with Supabase and enables default-deny RLS", () => {
+  assert.equal(orderMigration, supabaseOrderMigration);
+  const tables = [...orderMigration.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
+    ([, table]) => table,
+  );
+  assert.deepEqual(tables, [
+    "orders",
+    "shipments",
+    "order_items",
+    "stock_reservations",
+    "order_status_history",
+    "idempotency_keys",
+  ]);
+
+  for (const table of tables) {
+    assert.match(
+      orderMigration,
+      new RegExp(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`),
+      `${table} must enable RLS in its creation migration`,
+    );
+  }
+  assert.match(orderMigration, /shipments_order_id_vendor_id_key/);
+  assert.match(orderMigration, /order_items_shipment_order_vendor_fkey/);
+  assert.match(orderMigration, /stock_reservations_status_expires_at_idx/);
+  assert.match(orderMigration, /stock_reservations_product_variant_id_idx/);
+  assert.match(orderMigration, /order_items_order_id_shipment_id_vendor_id_idx/);
+  assert.match(orderMigration, /order_status_history_append_only/);
+  assert.match(orderMigration, /idempotency_keys_endpoint_key_key/);
+  assert.match(orderMigration, /"total" = "subtotal" \+ "shipping_total" \+ "tax_total"/);
+  assert.match(schema, /model Order \{/);
+  assert.match(schema, /model Shipment \{/);
+  assert.match(schema, /model StockReservation \{/);
+  assert.match(schema, /model IdempotencyKey \{/);
+  assert.doesNotMatch(orderMigration, /CREATE POLICY/i);
 });

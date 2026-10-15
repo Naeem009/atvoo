@@ -55,6 +55,49 @@ enum ProductApprovalDecision {
   @@map("product_approval_decision")
 }
 
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  COD_CONFIRMED
+  PROCESSING
+  PARTIALLY_SHIPPED
+  SHIPPED
+  PARTIALLY_DELIVERED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  FAILED_PAYMENT
+  REFUND_PENDING
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("order_status")
+}
+
+enum ShipmentStatus {
+  PENDING
+  PACKED
+  HANDED_TO_CARRIER
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RETURNING
+  RETURNED
+  LOST
+
+  @@map("shipment_status")
+}
+
+enum StockReservationStatus {
+  ACTIVE
+  CONSUMED
+  RELEASED
+  EXPIRED
+
+  @@map("stock_reservation_status")
+}
+
 model Vendor {
   id          String           @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
   displayName String           @map("display_name") @db.VarChar(160)
@@ -64,6 +107,8 @@ model Vendor {
   deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(6)
   products    Product[]
   variants    ProductVariant[]
+  orderItems  OrderItem[]
+  shipments   Shipment[]
 
   @@index([status])
   @@map("vendors")
@@ -180,6 +225,8 @@ model ProductVariant {
   vendor         Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   images         ProductImage[]       @relation("VariantImages")
   cartItems      CartItem[]
+  orderItems     OrderItem[]
+  reservations   StockReservation[]
 
   @@unique([vendorId, sku])
   @@unique([productId, id])
@@ -215,6 +262,128 @@ model CartItem {
   @@unique([cartId, productVariantId])
   @@index([cartId, createdAt])
   @@map("cart_items")
+}
+
+model Order {
+  id                    String      @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderNumber           String      @unique @map("order_number") @db.VarChar(20)
+  buyerEmail            String      @map("buyer_email") @db.VarChar(254)
+  buyerPhone            String      @map("buyer_phone") @db.VarChar(30)
+  recipientName         String      @map("recipient_name") @db.VarChar(160)
+  shippingAddressLine1  String      @map("shipping_address_line1") @db.VarChar(200)
+  shippingAddressLine2  String?     @map("shipping_address_line2") @db.VarChar(200)
+  shippingCity          String      @map("shipping_city") @db.VarChar(100)
+  shippingProvince      String      @map("shipping_province") @db.VarChar(100)
+  shippingPostalCode    String?     @map("shipping_postal_code") @db.VarChar(20)
+  shippingCountryCode   String      @default("PK") @map("shipping_country_code") @db.Char(2)
+  currency              String      @default("PKR") @db.Char(3)
+  subtotal              BigInt
+  shippingTotal         BigInt      @default(0) @map("shipping_total")
+  taxTotal              BigInt      @default(0) @map("tax_total")
+  total                 BigInt
+  status                OrderStatus @default(PENDING_PAYMENT)
+  version               Int         @default(1)
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items                 OrderItem[]
+  shipments             Shipment[]
+  reservations          StockReservation[]
+  statusHistory         OrderStatusHistory[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("orders")
+}
+
+model Shipment {
+  id            String         @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderId       String         @map("order_id") @db.Uuid
+  vendorId      String         @map("vendor_id") @db.Uuid
+  status        ShipmentStatus @default(PENDING)
+  trackingNumber String?       @map("tracking_number") @db.VarChar(100)
+  carrier       String?        @db.VarChar(100)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+
+  @@unique([orderId, vendorId])
+  @@unique([orderId, id, vendorId])
+  @@index([vendorId, status, createdAt(sort: Desc)])
+  @@map("shipments")
+}
+
+model OrderItem {
+  id               String         @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderId          String         @map("order_id") @db.Uuid
+  shipmentId       String         @map("shipment_id") @db.Uuid
+  vendorId         String         @map("vendor_id") @db.Uuid
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productTitle     String         @map("product_title") @db.VarChar(150)
+  variantSku       String         @map("variant_sku") @db.VarChar(100)
+  quantity         Int
+  unitPrice        BigInt         @map("unit_price")
+  currency         String         @db.Char(3)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  shipment         Shipment       @relation(fields: [orderId, shipmentId, vendorId], references: [orderId, id, vendorId], onDelete: Restrict)
+  vendor           Vendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, productVariantId])
+  @@index([orderId, shipmentId, vendorId])
+  @@index([vendorId, createdAt(sort: Desc)])
+  @@map("order_items")
+}
+
+model StockReservation {
+  id               String                 @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderId          String                 @map("order_id") @db.Uuid
+  productVariantId String                 @map("product_variant_id") @db.Uuid
+  quantity         Int
+  status           StockReservationStatus @default(ACTIVE)
+  expiresAt        DateTime               @map("expires_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order            Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productVariant   ProductVariant         @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, productVariantId])
+  @@index([productVariantId])
+  @@index([status, expiresAt])
+  @@map("stock_reservations")
+}
+
+model OrderStatusHistory {
+  id             String         @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderId        String?        @map("order_id") @db.Uuid
+  shipmentId     String?        @map("shipment_id") @db.Uuid
+  orderStatus    OrderStatus?   @map("order_status")
+  shipmentStatus ShipmentStatus? @map("shipment_status")
+  actorId        String?        @map("actor_id") @db.Uuid
+  reason         String?        @db.VarChar(500)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  order          Order?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  shipment       Shipment?      @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, createdAt])
+  @@index([shipmentId, createdAt])
+  @@map("order_status_history")
+}
+
+model IdempotencyKey {
+  id          String   @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  key         String   @db.VarChar(100)
+  endpoint    String   @db.VarChar(200)
+  requestHash String   @map("request_hash") @db.VarChar(64)
+  response    Json     @db.JsonB
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([endpoint, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
 }
 
 model ProductImage {

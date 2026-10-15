@@ -12,7 +12,11 @@ This is the primary onboarding and operating guide for the ATVOO repository. It 
 ### Current repository baseline (verified 2026-10-13)
 
 The repository is in **Phase 3 — Cart and order lifecycle**; the Phase 2
-catalog-and-discovery exit gate passed. The current source is a root-level
+catalog-and-discovery exit gate passed. The Phase 3 order persistence foundation
+now defines orders, vendor shipments, order items, stock reservations, status
+history, and idempotency records with default-deny RLS. No order-creation API,
+checkout quote, shipping configuration, or payment integration is implemented.
+The current source is a root-level
 Next.js storefront (`app/`) plus a small NestJS API workspace (`apps/api/`) and
 a Prisma catalog workspace (`packages/database/`). The API implements public
 product listing/search/detail, categories, and brands. It powers
@@ -1121,7 +1125,7 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 | --- | --- | --- |
 | Next.js storefront | Phase 2 complete; Phase 3 guest-cart slice | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, guest cart, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; checkout/orders and portals remain unimplemented. |
 | NestJS catalog and cart API | Implemented slices | `apps/api/src/`; public product list/search/detail, categories, brands, and guest-cart read/add/update/remove endpoints. |
-| Catalog/cart schema and migrations | Implemented foundation | `packages/database/prisma/` and matching `supabase/migrations/`; not the full domain model in `02`. Hosted Supabase application of the cart migration is unverified. |
+| Catalog/cart/order schema and migrations | Implemented foundation | `packages/database/prisma/` and matching `supabase/migrations/`; the order migration adds persistence only, not order behavior. Hosted Supabase application of these migrations is unverified. |
 | Public catalog visibility/search | Implemented slice | Catalog service enforces publication criteria; PostgreSQL full-text/trigram search migrations are present. |
 | Catalog RLS | Implemented for initial catalog tables | Default-deny policies are in the catalog migration set; no claim is made for future or absent tables. |
 | API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
@@ -1130,7 +1134,7 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 | Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
 | Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
 | Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
-| Checkout, orders, payments, escrow, payouts | Not implemented | Cart is implemented as a separate foundation; no order schema/API, checkout quote, payment integration, or stock reservation exists. |
+| Checkout, orders, payments, escrow, payouts | Persistence foundation only | Order, shipment, order-item, stock-reservation, status-history, and idempotency tables exist with constraints and RLS. No order API, quote, reservation mutation/expiry job, payment integration, escrow, or payout flow exists. |
 | Vendor/admin portals, CMS, reviews, loyalty, affiliates, returns | Not implemented | Target requirements only. |
 | Redis, outbox, n8n, social automation, visual search/pgvector | Not implemented | Target requirements only. |
 | CI/CD and production deployment | Not configured / unverified | No checked-in GitHub Actions workflows or API Dockerfile/deployment file. |
