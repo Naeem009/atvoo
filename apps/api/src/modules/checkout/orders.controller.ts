@@ -13,6 +13,7 @@ import { parseCartSession } from "../cart/cart-query";
 import {
   parseCreateOrderInput,
   parseIdempotencyKey,
+  parseTrackOrderInput,
 } from "./checkout-query";
 import { OrdersService } from "./orders.service";
 
@@ -50,5 +51,17 @@ export class OrdersController {
     );
     if (result.replayed) response.setHeader("Idempotent-Replayed", "true");
     return { data: result.data };
+  }
+
+  @Post("track")
+  @ApiOperation({ summary: "Track a guest order using its private tracking token" })
+  async trackGuestOrder(@Body() body: unknown) {
+    const input = parseTrackOrderInput(body);
+    return {
+      data: await this.ordersService.trackGuestOrder(
+        input.orderNumber,
+        input.trackingToken,
+      ),
+    };
   }
 }

@@ -11,7 +11,7 @@ import { PrismaService } from "../database/prisma.service";
 import type { CatalogQuery } from "./catalog-query";
 
 const productInclude = {
-  vendor: { select: { displayName: true } },
+  vendor: { select: { id: true, displayName: true } },
   category: { select: { name: true, slug: true } },
   brand: { select: { name: true, slug: true } },
   variants: {
@@ -58,6 +58,16 @@ export class CatalogService {
         );
       } else if (query.sort === "price-asc" || query.sort === "price-desc") {
         const ids = await this.priceSortedProductIds(query);
+        total = Number(ids[0]?.total ?? 0n);
+        const productIds = ids.flatMap((row) => (row.id ? [row.id] : []));
+        products = await this.loadProducts(productIds);
+        const order = new Map(productIds.map((id, index) => [id, index]));
+        products.sort(
+          (left, right) =>
+            (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0),
+        );
+      } else if (query.sort === "popular") {
+        const ids = await this.popularProductIds(query);
         total = Number(ids[0]?.total ?? 0n);
         const productIds = ids.flatMap((row) => (row.id ? [row.id] : []));
         products = await this.loadProducts(productIds);
@@ -176,6 +186,25 @@ export class CatalogService {
     }
   }
 
+  async listVendors() {
+    try {
+      const vendors = await this.prisma.vendor.findMany({
+        where: {
+          status: "APPROVED",
+          deletedAt: null,
+          products: { some: this.publicProductWhere() },
+        },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: "asc" },
+      });
+      return {
+        data: vendors.map((vendor) => ({ id: vendor.id, name: vendor.displayName })),
+      };
+    } catch (error) {
+      this.handleDatabaseError(error, "Could not load public vendors.");
+    }
+  }
+
   createEtag(data: unknown): string {
     return `"${createHash("sha256").update(JSON.stringify(data)).digest("hex")}"`;
   }
@@ -276,6 +305,53 @@ export class CatalogService {
     `);
   }
 
+  private async popularProductIds(query: CatalogQuery): Promise<SearchRow[]> {
+    const conditions = this.rawPublicConditions(query);
+    const variantConditions = this.variantConditions(query, "v");
+    const offset = (query.page - 1) * query.pageSize;
+    return this.prisma.$queryRaw<SearchRow[]>(Prisma.sql`
+      WITH popularity AS (
+        SELECT variant.product_id, sum(order_item.quantity)::bigint AS units_sold
+        FROM public.order_items AS order_item
+        JOIN public.orders AS sales_order ON sales_order.id = order_item.order_id
+        JOIN public.product_variants AS variant
+          ON variant.id = order_item.product_variant_id
+        WHERE sales_order.status IN (
+          'PAID', 'COD_CONFIRMED', 'PROCESSING', 'PARTIALLY_SHIPPED',
+          'SHIPPED', 'PARTIALLY_DELIVERED', 'DELIVERED', 'COMPLETED'
+        )
+        GROUP BY variant.product_id
+      ),
+      matching_products AS (
+        SELECT p.id, p.created_at, COALESCE(popularity.units_sold, 0) AS units_sold
+        FROM public.products AS p
+        JOIN public.vendors AS vendor ON vendor.id = p.vendor_id
+        JOIN public.categories AS category ON category.id = p.category_id
+        JOIN public.brands AS brand ON brand.id = p.brand_id
+        JOIN public.product_variants AS v ON v.product_id = p.id
+          AND ${Prisma.join(variantConditions, " AND ")}
+        LEFT JOIN popularity ON popularity.product_id = p.id
+        WHERE ${Prisma.join(conditions, " AND ")}
+        GROUP BY p.id, p.created_at, popularity.units_sold
+      ),
+      counted AS (
+        SELECT id, created_at, units_sold, count(*) OVER () AS total
+        FROM matching_products
+      ),
+      total_count AS (
+        SELECT count(*) AS total FROM matching_products
+      )
+      SELECT page.id::text AS id, total_count.total
+      FROM total_count
+      LEFT JOIN LATERAL (
+        SELECT id
+        FROM counted
+        ORDER BY units_sold DESC, created_at DESC, id ASC
+        LIMIT ${query.pageSize} OFFSET ${offset}
+      ) AS page ON true
+    `);
+  }
+
   private rawPublicConditions(query: CatalogQuery): Prisma.Sql[] {
     const conditions: Prisma.Sql[] = [
       Prisma.sql`p.status = 'ACTIVE'`,
@@ -301,6 +377,9 @@ export class CatalogService {
       conditions.push(Prisma.sql`category.slug = ${query.category}`);
     }
     if (query.brand) conditions.push(Prisma.sql`brand.slug = ${query.brand}`);
+    if (query.vendorId) {
+      conditions.push(Prisma.sql`p.vendor_id = ${query.vendorId}::uuid`);
+    }
     if (query.availability === "in-stock") {
       conditions.push(
         Prisma.sql`EXISTS (
@@ -386,7 +465,11 @@ export class CatalogService {
       status: ProductStatus.ACTIVE,
       approvalStatus: { in: ["APPROVED", "AUTO_APPROVED"] },
       deletedAt: null,
-      vendor: { status: "APPROVED", deletedAt: null },
+      vendor: {
+        status: "APPROVED",
+        deletedAt: null,
+        ...(query.vendorId && { id: query.vendorId }),
+      },
       category: {
         isActive: true,
         ...(query.category && { slug: query.category }),

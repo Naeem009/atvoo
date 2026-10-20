@@ -12,7 +12,10 @@ const product = {
   condition: "NEW",
   category: { name: "Camera Gear", slug: "camera-gear" },
   brand: { name: "Example Brand", slug: "example-brand" },
-  vendor: { name: "Example Seller" },
+  vendor: {
+    id: "123e4567-e89b-42d3-a456-426614174099",
+    name: "Example Seller",
+  },
   price: { amount: "149900", currency: "PKR" },
   availability: "IN_STOCK",
   variants: [
@@ -51,6 +54,9 @@ const products = Array.from({ length: 21 }, (_, index) =>
 );
 const brands = [
   { id: "brand-1", name: "Example Brand", slug: "example-brand" },
+];
+const vendors = [
+  { id: product.vendor.id, name: product.vendor.name },
 ];
 const productQueries = [];
 const cartSessionId = "123e4567-e89b-42d3-a456-426614174000";
@@ -210,6 +216,10 @@ const api = createServer(async (request, response) => {
     respond(response, 200, { data: brands });
     return;
   }
+  if (url.pathname === "/api/v1/vendors") {
+    respond(response, 200, { data: vendors });
+    return;
+  }
   respond(response, 404, { message: "not found" });
 });
 
@@ -323,6 +333,19 @@ async function main() {
     }
     assert.ok(ready, `Next.js did not become ready: ${serverError}`);
 
+    const home = await getHtml(baseUrl);
+    assert.equal(home.response.status, 200);
+    assertAccessibleShell(home.html, "home page");
+    assert.match(home.html, /Latest from our vendors/);
+    assert.match(home.html, /Test Camera/);
+    assert.match(home.html, /Example Seller/);
+    assert.match(home.html, /Just landed/);
+    assert.match(home.html, /Test Camera 2/);
+    const latestProductsQuery = productQueries.find(
+      (query) => query.get("pageSize") === "5" && query.get("sort") === "newest",
+    );
+    assert.ok(latestProductsQuery, "home page requests newest catalog products");
+
     const listing = await getHtml(`${baseUrl}/products`);
     assert.equal(listing.response.status, 200);
     assertAccessibleShell(listing.html, "product listing");
@@ -335,6 +358,12 @@ async function main() {
     assert.ok((listing.html.match(/<label\b/g) ?? []).length >= 7);
     assert.match(listing.html, /aria-label="Catalog filters"/);
     assert.match(listing.html, /aria-label="Product results"/);
+    assert.match(listing.html, /Supplier/);
+    assert.match(listing.html, /Most popular/);
+    assert.match(
+      listing.html,
+      /href="\/products\?vendorId=123e4567-e89b-42d3-a456-426614174099"/,
+    );
     assert.match(listing.html, /rel="canonical" href="http:\/\/127\.0\.0\.1:/);
     const listingSchema = listing.html.match(
       /<script type="application\/ld\+json">([\s\S]*?)<\/script>/,
@@ -363,6 +392,16 @@ async function main() {
     })) {
       assert.equal(forwarded.get(key), value, `${key} filter forwarded`);
     }
+
+    const supplierBrowse = await getHtml(
+      `${baseUrl}/products?vendorId=${product.vendor.id}&sort=popular`,
+    );
+    assert.equal(supplierBrowse.response.status, 200);
+    assert.match(supplierBrowse.html, /Most popular/);
+    const supplierQuery = productQueries.find(
+      (query) => query.get("vendorId") === product.vendor.id,
+    );
+    assert.equal(supplierQuery?.get("sort"), "popular");
 
     const categoryIndex = await getHtml(`${baseUrl}/categories`);
     assert.equal(categoryIndex.response.status, 200);

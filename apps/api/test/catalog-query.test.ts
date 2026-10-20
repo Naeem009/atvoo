@@ -26,6 +26,7 @@ test("catalog queries parse supported filters", () => {
       q: "linen shirt",
       category: "fashion-men",
       brand: "unbranded",
+      vendorId: "123e4567-e89b-42d3-a456-426614174001",
       minPrice: "100",
       maxPrice: "5000",
       availability: "in-stock",
@@ -37,6 +38,7 @@ test("catalog queries parse supported filters", () => {
       q: "linen shirt",
       category: "fashion-men",
       brand: "unbranded",
+      vendorId: "123e4567-e89b-42d3-a456-426614174001",
       minPrice: 100,
       maxPrice: 5000,
       availability: "in-stock",
@@ -58,6 +60,30 @@ test("catalog queries reject unknown parameters and unbounded pages", () => {
   ]) {
     assert.throws(() => parseCatalogQuery(input), HttpException);
   }
+});
+
+test("catalog browse accepts supplier and popularity filters", () => {
+  assert.deepEqual(
+    parseCatalogQuery({
+      vendorId: "123e4567-e89b-42d3-a456-426614174001",
+      sort: "popular",
+    }),
+    {
+      page: 1,
+      pageSize: 20,
+      vendorId: "123e4567-e89b-42d3-a456-426614174001",
+      availability: "all",
+      sort: "popular",
+    },
+  );
+  assert.throws(
+    () => parseCatalogQuery({ vendorId: "supplier-name" }),
+    HttpException,
+  );
+  assert.throws(
+    () => parseCatalogQuery({ q: "camera", sort: "popular" }),
+    HttpException,
+  );
 });
 
 test("guest-cart input accepts UUID sessions and bounded variant quantities", () => {

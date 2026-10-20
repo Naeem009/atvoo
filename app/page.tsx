@@ -1,9 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
+import { connection } from "next/server";
+import {
+  CatalogApiError,
+  formatCatalogPrice,
+  getProductPage,
+  type CatalogProduct,
+} from "@/app/lib/catalog";
+
+export const instant = false;
 
 const categories = [
   {
     name: "Fashion",
+    slug: "fashion",
     description: "Clothing, shoes and accessories",
     image:
       "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1000&q=85",
@@ -11,6 +21,7 @@ const categories = [
   },
   {
     name: "Home & Kitchen",
+    slug: "home-kitchen",
     description: "Thoughtful finds for your space",
     image:
       "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1000&q=85",
@@ -18,6 +29,7 @@ const categories = [
   },
   {
     name: "Electronics",
+    slug: "electronics",
     description: "Everyday tech and accessories",
     image:
       "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1000&q=85",
@@ -25,6 +37,7 @@ const categories = [
   },
   {
     name: "Beauty & Personal Care",
+    slug: "beauty-personal-care",
     description: "Daily essentials and care",
     image:
       "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1000&q=85",
@@ -32,51 +45,138 @@ const categories = [
   },
 ];
 
-export default function Home() {
+function LatestProductCard({ product }: { product: CatalogProduct }) {
+  const image = product.images[0];
+  return (
+    <article className="latest-product-card">
+      <Link
+        className="latest-product-image"
+        href={`/products/${encodeURIComponent(product.slug)}`}
+        aria-label={`View ${product.title}`}
+      >
+        {image ? (
+          <Image
+            src={image.url}
+            alt={image.alt || product.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          />
+        ) : (
+          <span className="catalog-image-placeholder" aria-hidden="true">
+            ATVOO
+          </span>
+        )}
+      </Link>
+      <div className="latest-product-copy">
+        <p className="catalog-card-category">{product.category.name}</p>
+        <h3>
+          <Link href={`/products/${encodeURIComponent(product.slug)}`}>
+            {product.title}
+          </Link>
+        </h3>
+        <p className="catalog-card-vendor">From {product.vendor.name}</p>
+        {product.price && (
+          <p className="catalog-price">{formatCatalogPrice(product.price)}</p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+export default async function Home() {
+  await connection();
+  let latestProducts: CatalogProduct[] = [];
+  let catalogUnavailable = false;
+  try {
+    ({ data: latestProducts } = await getProductPage(
+      "page=1&pageSize=5&sort=newest",
+    ));
+  } catch (error) {
+    if (!(error instanceof CatalogApiError)) throw error;
+    catalogUnavailable = true;
+  }
+  const featuredProduct = latestProducts[0];
+
   return (
     <>
-      <div className="announcement-bar">
-        <p>Good finds. More ways to discover.</p>
-      </div>
-      <header className="site-header">
-        <a className="wordmark" href="#top" aria-label="ATVOO home">
-          ATVOO<span>.</span>
-        </a>
-        <nav className="desktop-nav" aria-label="Main navigation">
-          <Link href="/categories">Explore categories</Link>
-          <a href="#our-point-of-view">Our point of view</a>
-        </nav>
-        <Link className="header-action" href="/products">
-          Explore <span aria-hidden="true">↗</span>
-        </Link>
-      </header>
-
       <main id="main-content">
         <section className="hero" id="top" aria-labelledby="hero-title">
-          <Image
-            className="hero-image"
-            src="https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=2400&q=90"
-            alt="A shopper browsing a clothing rack in a bright boutique"
-            fill
-            priority
-            sizes="100vw"
-          />
+          {featuredProduct?.images[0] && (
+            <Image
+              className="hero-image"
+              src={featuredProduct.images[0].url}
+              alt={featuredProduct.images[0].alt || featuredProduct.title}
+              fill
+              priority
+              sizes="100vw"
+            />
+          )}
           <div className="hero-shade" />
           <div className="hero-content">
-            <p className="eyebrow hero-eyebrow">
-              A marketplace, with a point of view
-            </p>
-            <h1 id="hero-title">ATVOO</h1>
-            <p className="hero-copy">
-              Find the things that make a place, a day, or a whole life feel more
-              like yours.
-            </p>
-            <Link className="button button-light" href="/products">
-              Find your corner <span aria-hidden="true">↘</span>
-            </Link>
+            {featuredProduct ? (
+              <>
+                <p className="eyebrow hero-eyebrow">Latest from our vendors</p>
+                <h1 id="hero-title">{featuredProduct.title}</h1>
+                <p className="hero-copy">
+                  {featuredProduct.category.name} · Sold by {featuredProduct.vendor.name}
+                </p>
+                {featuredProduct.price && (
+                  <p className="hero-price">
+                    {formatCatalogPrice(featuredProduct.price)}
+                  </p>
+                )}
+                <div className="hero-actions">
+                  <Link
+                    className="button button-light"
+                    href={`/products/${encodeURIComponent(featuredProduct.slug)}`}
+                  >
+                    View latest find <span aria-hidden="true">↗</span>
+                  </Link>
+                  <Link className="button button-quiet" href="/products">
+                    Shop all products
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow hero-eyebrow">New finds, from local vendors</p>
+                <h1 id="hero-title">Find your next favorite.</h1>
+                <p className="hero-copy">
+                  {catalogUnavailable
+                    ? "The latest arrivals are temporarily unavailable. Explore categories while we reconnect."
+                    : "Discover new products from independent vendors across the marketplace."}
+                </p>
+                <Link className="button button-light" href="/categories">
+                  Explore categories <span aria-hidden="true">↗</span>
+                </Link>
+              </>
+            )}
           </div>
-          <p className="hero-caption">Independent finds. Everyday favorites.</p>
+          <p className="hero-caption">
+            {featuredProduct
+              ? `New from ${featuredProduct.vendor.name}`
+              : "Independent finds. Everyday favorites."}
+          </p>
         </section>
+
+        {latestProducts.length > 1 && (
+          <section className="latest-section section-wrap" aria-labelledby="latest-heading">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Freshly listed</p>
+                <h2 id="latest-heading">Just landed</h2>
+              </div>
+              <Link className="text-link latest-all-link" href="/products?sort=newest">
+                See all new arrivals <span aria-hidden="true">↗</span>
+              </Link>
+            </div>
+            <div className="latest-product-grid">
+              {latestProducts.slice(1).map((product) => (
+                <LatestProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="category-section section-wrap" id="categories">
           <div className="section-heading">
@@ -94,7 +194,12 @@ export default function Home() {
           </Link>
           <div className="category-grid">
             {categories.map((category) => (
-              <article className="category-tile" key={category.name}>
+              <Link
+                className="category-tile"
+                href={`/categories/${category.slug}`}
+                key={category.slug}
+                aria-label={`Explore ${category.name}: ${category.description}`}
+              >
                 <Image
                   src={category.image}
                   alt=""
@@ -107,7 +212,7 @@ export default function Home() {
                   <h3>{category.name}</h3>
                   <p>{category.description}</p>
                 </div>
-              </article>
+              </Link>
             ))}
           </div>
         </section>
@@ -133,15 +238,6 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="site-footer">
-        <a className="wordmark footer-wordmark" href="#top" aria-label="ATVOO home">
-          ATVOO<span>.</span>
-        </a>
-        <p>Made for the things you make your own.</p>
-        <a className="footer-top" href="#top">
-          Back to top <span aria-hidden="true">↑</span>
-        </a>
-      </footer>
     </>
   );
 }

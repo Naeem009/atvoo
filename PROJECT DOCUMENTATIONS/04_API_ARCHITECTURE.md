@@ -46,15 +46,18 @@ The current API workspace implements these unauthenticated, versioned routes:
 
 - `GET /api/v1/products` and `GET /api/v1/products/search`
 - `GET /api/v1/products/:idOrSlug`
-- `GET /api/v1/categories` and `GET /api/v1/brands`
+- `GET /api/v1/categories`, `GET /api/v1/brands`, and `GET /api/v1/vendors`
 
 Product lists accept `page` (default 1, maximum 10,000), `pageSize` (default
-20, maximum 100), `q` (2–100 characters), `category` and `brand` slugs,
-`minPrice` and `maxPrice` in minor units, `availability=all|in-stock`, and
-`sort=newest|price-asc|price-desc|relevance`. Search requires `q`; relevance
-sorting is only accepted with a query. Unknown parameters and invalid
-combinations return 422. Product lists use the standard `{ data, meta }`
-pagination envelope. Public products must be active, approved, owned by an
+20 maximum 100), `q` (2–100 characters), `category` and `brand` slugs,
+`vendorId` (UUID), `minPrice` and `maxPrice` in minor units,
+`availability=all|in-stock`, and
+`sort=newest|popular|price-asc|price-desc|relevance`. Popularity sorts by units
+in paid, COD-confirmed, and active fulfilment orders, then newest product first;
+it is only available without `q`. Search requires `q`; relevance sorting is
+only accepted with a query. Unknown parameters and invalid combinations return
+422. Product lists use the standard `{ data, meta }` pagination envelope. Public
+products must be active, approved, owned by an
 approved vendor, assigned to active taxonomy records, and have an active
 variant and at least one image. Product image URLs use the configured public
 `SUPABASE_STORAGE_BUCKET_PRODUCT_MEDIA` bucket.

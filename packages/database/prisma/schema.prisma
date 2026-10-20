@@ -74,6 +74,32 @@ enum OrderStatus {
   @@map("order_status")
 }
 
+enum PaymentMethod {
+  COD
+  CARD
+  JAZZCASH
+  EASYPAISA
+  BANK_TRANSFER
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+  REFUND_FAILED
+  DISPUTE_OPEN
+  WON
+  LOST
+
+  @@map("payment_status")
+}
+
 enum ShipmentStatus {
   PENDING
   PACKED
@@ -396,9 +422,30 @@ model Order {
   shipments             Shipment[]
   reservations          StockReservation[]
   statusHistory         OrderStatusHistory[]
+  payments              Payment[]
 
   @@index([status, createdAt(sort: Desc)])
   @@map("orders")
+}
+
+model Payment {
+  id                String        @id @default(dbgenerated("public.uuid_generate_v7()")) @db.Uuid
+  orderId           String        @map("order_id") @db.Uuid
+  method            PaymentMethod
+  status            PaymentStatus @default(INITIATED)
+  provider          String?       @db.VarChar(40)
+  providerReference String?       @map("provider_reference") @db.VarChar(200)
+  amount            BigInt
+  currency          String        @db.Char(3)
+  version           Int           @default(1)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerReference])
+  @@index([orderId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("payments")
 }
 
 model Shipment {

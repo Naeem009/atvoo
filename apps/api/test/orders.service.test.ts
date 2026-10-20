@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ConflictException } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { OrderStatus, ShipmentStatus } from "@prisma/client";
 import type { PrismaService } from "../src/modules/database/prisma.service";
 import { OrdersService } from "../src/modules/checkout/orders.service";
@@ -217,4 +218,63 @@ test("order creation rejects exhausted inventory before writing the order", asyn
   );
   assert.equal(calls.orders.length, 0);
   assert.equal(calls.reservations.length, 0);
+});
+
+test("guest tracking returns order details only for the matching private token", async () => {
+  const trackingToken = "A".repeat(43);
+  const trackingTokenHash = createHash("sha256")
+    .update(JSON.stringify(trackingToken))
+    .digest("hex");
+  const service = new OrdersService({
+    order: {
+      findUnique: async () => ({
+        trackingTokenHash,
+        status: OrderStatus.PENDING_PAYMENT,
+        currency: "PKR",
+        subtotal: 1_000n,
+        shippingTotal: 200n,
+        taxTotal: 120n,
+        total: 1_320n,
+        createdAt: new Date("2026-10-20T10:00:00.000Z"),
+        items: [
+          {
+            productTitle: "Test item",
+            quantity: 1,
+            unitPrice: 1_100n,
+            taxAmount: 100n,
+          },
+        ],
+        shipments: [],
+        statusHistory: [],
+      }),
+    },
+  } as unknown as PrismaService);
+
+  const result = await service.trackGuestOrder("ATV-2610-000001", trackingToken);
+
+  assert.equal(result.orderNumber, "ATV-2610-000001");
+  assert.deepEqual(result.totals, {
+    subtotal: "1000",
+    shipping: "200",
+    tax: "120",
+    total: "1320",
+  });
+  assert.equal("buyerEmail" in result, false);
+  assert.equal("trackingToken" in result, false);
+  assert.equal("trackingTokenHash" in result, false);
+});
+
+test("guest tracking hides orders when the private token is invalid", async () => {
+  const service = new OrdersService({
+    order: {
+      findUnique: async () => ({
+        trackingTokenHash: "0".repeat(64),
+      }),
+    },
+  } as unknown as PrismaService);
+
+  await assert.rejects(
+    service.trackGuestOrder("ATV-2610-000001", "B".repeat(43)),
+    NotFoundException,
+  );
 });

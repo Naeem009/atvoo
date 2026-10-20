@@ -142,6 +142,20 @@ const supabaseOrderTrackingMigration = readFileSync(
   ),
   "utf8",
 );
+const paymentFoundationMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "prisma/migrations/20261020100000_payment_foundation/migration.sql",
+  ),
+  "utf8",
+);
+const supabasePaymentFoundationMigration = readFileSync(
+  resolve(
+    packageRoot,
+    "../../supabase/migrations/20261020100000_payment_foundation.sql",
+  ),
+  "utf8",
+);
 const supabaseProductSearchMigration = readFileSync(
   resolve(
     packageRoot,
@@ -360,4 +374,23 @@ test("guest tracking tokens are stored as a unique nullable hash", () => {
   assert.match(orderTrackingMigration, /ADD COLUMN "tracking_token_hash" CHAR\(64\)/);
   assert.match(orderTrackingMigration, /orders_tracking_token_hash_key/);
   assert.match(schema, /trackingTokenHash\s+String\?/);
+});
+
+test("payment attempts are order-linked, constrained, mirrored, and default-deny", () => {
+  assert.equal(paymentFoundationMigration, supabasePaymentFoundationMigration);
+  assert.deepEqual(
+    [...paymentFoundationMigration.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
+      ([, table]) => table,
+    ),
+    ["payments"],
+  );
+  assert.match(paymentFoundationMigration, /CREATE TYPE "payment_method" AS ENUM/);
+  assert.match(paymentFoundationMigration, /CREATE TYPE "payment_status" AS ENUM/);
+  assert.match(paymentFoundationMigration, /FOREIGN KEY \("order_id"\) REFERENCES "orders"\("id"\)/);
+  assert.match(paymentFoundationMigration, /payments_amount_check/);
+  assert.match(paymentFoundationMigration, /payments_version_check/);
+  assert.match(paymentFoundationMigration, /payments_provider_provider_reference_key/);
+  assert.match(paymentFoundationMigration, /ALTER TABLE "payments" ENABLE ROW LEVEL SECURITY/);
+  assert.match(schema, /model Payment \{/);
+  assert.match(schema, /payments\s+Payment\[\]/);
 });

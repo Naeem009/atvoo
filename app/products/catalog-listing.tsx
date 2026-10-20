@@ -7,9 +7,11 @@ import {
   getBrands,
   getCategories,
   getProductPage,
+  getVendors,
   type CatalogBrand,
   type CatalogCategory,
   type CatalogProduct,
+  type CatalogVendor,
   type ProductPage,
 } from "@/app/lib/catalog";
 import { absoluteSiteUrl } from "@/app/lib/site";
@@ -64,7 +66,12 @@ function ProductCard({ product }: { product: CatalogProduct }) {
         <h2>
           <Link href={productHref}>{product.title}</Link>
         </h2>
-        <p className="catalog-card-vendor">Sold by {product.vendor.name}</p>
+        <p className="catalog-card-vendor">
+          Sold by{" "}
+          <Link href={`/products?vendorId=${encodeURIComponent(product.vendor.id)}`}>
+            {product.vendor.name}
+          </Link>
+        </p>
         {product.price && (
           <p className="catalog-price">{formatCatalogPrice(product.price)}</p>
         )}
@@ -80,10 +87,12 @@ function FilterForm({
   query,
   categories,
   brands,
+  vendors,
 }: {
   query: URLSearchParams;
   categories: CatalogCategory[];
   brands: CatalogBrand[];
+  vendors: CatalogVendor[];
 }) {
   return (
     <form className="catalog-filters" action="/products" method="get">
@@ -131,6 +140,17 @@ function FilterForm({
         />
       </label>
       <label>
+        Supplier
+        <select name="vendorId" defaultValue={query.get("vendorId") ?? ""}>
+          <option value="">All suppliers</option>
+          {vendors.map((vendor) => (
+            <option key={vendor.id} value={vendor.id}>
+              {vendor.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
         Maximum price (PKR paisa)
         <input
           type="number"
@@ -153,6 +173,7 @@ function FilterForm({
       <label>
         Sort by
         <select name="sort" defaultValue={query.get("sort") ?? "newest"}>
+          {!query.has("q") && <option value="popular">Most popular</option>}
           <option value="newest">Newest</option>
           <option value="price-asc">Price: low to high</option>
           <option value="price-desc">Price: high to low</option>
@@ -310,15 +331,17 @@ async function CatalogContent({
         result: ProductPage;
         categories: CatalogCategory[];
         brands: CatalogBrand[];
+        vendors: CatalogVendor[];
       }
     | { error: string };
   try {
-    const [result, categories, brands] = await Promise.all([
+    const [result, categories, brands, vendors] = await Promise.all([
       getProductPage(query),
       getCategories(),
       getBrands(),
+      getVendors(),
     ]);
-    catalogData = { result, categories, brands };
+    catalogData = { result, categories, brands, vendors };
   } catch (error) {
     if (error instanceof CatalogApiError) {
       catalogData = { error: error.message };
@@ -345,7 +368,7 @@ async function CatalogContent({
     );
   }
 
-  const { result, categories, brands } = catalogData;
+  const { result, categories, brands, vendors } = catalogData;
   const heading = category?.name ?? "Explore products";
   return (
     <main id="main-content" className="catalog-page">
@@ -361,7 +384,12 @@ async function CatalogContent({
       </header>
       <div className="catalog-layout">
         <aside aria-label="Catalog filters">
-          <FilterForm query={params} categories={categories} brands={brands} />
+          <FilterForm
+            query={params}
+            categories={categories}
+            brands={brands}
+            vendors={vendors}
+          />
         </aside>
         <section aria-label="Product results">
           <ProductGrid

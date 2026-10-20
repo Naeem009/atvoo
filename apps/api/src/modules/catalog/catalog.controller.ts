@@ -96,6 +96,16 @@ export class CatalogController {
     return this.setCacheHeaders(result, ifNoneMatch, response);
   }
 
+  @Get("vendors")
+  @ApiOperation({ summary: "List approved vendors with public products" })
+  async listVendors(
+    @Headers("if-none-match") ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.catalogService.listVendors();
+    return this.setCacheHeaders(result, ifNoneMatch, response);
+  }
+
   private setCacheHeaders<T>(
     data: T,
     ifNoneMatch: string | undefined,

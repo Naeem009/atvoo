@@ -5,17 +5,21 @@
 **Audience:** Developers, technical leads, QA engineers, DevOps engineers, and AI coding agents (including Cursor)
 **Document status:** Source of truth for resolved requirements and development process; implementation status is verified against the current source tree
 **Supersedes:** v3 (Supabase + n8n edition); all prior versions are historical only
-**Last verified:** 2026-10-13
+**Last verified:** 2026-10-20
 
 This is the primary onboarding and operating guide for the ATVOO repository. It explains the intended system, how to run the code that exists today, and how to develop it safely. The numbered specification documents describe product requirements and target architecture; they do not prove that a feature exists. This handbook resolves requirements and documents the supported workflow. The checked-in source, tests, migrations, and package scripts are authoritative evidence of implementation. If a status claim here conflicts with that evidence, the code is the implementation source of truth and this handbook must be corrected. Deployment and remote-service status must be described as unverified until actually verified.
 
-### Current repository baseline (verified 2026-10-13)
+### Current repository baseline (verified 2026-10-20)
 
 The repository is in **Phase 3 — Cart and order lifecycle**; the Phase 2
-catalog-and-discovery exit gate passed. The Phase 3 order persistence foundation
-now defines orders, vendor shipments, order items, stock reservations, status
-history, and idempotency records with default-deny RLS. No order-creation API,
-checkout quote, shipping configuration, or payment integration is implemented.
+catalog-and-discovery exit gate passed. Phase 3 now includes guest-cart
+persistence, shipping/tax checkout quotes, idempotent guest order creation with
+vendor shipments and stock reservations, and token-protected guest order
+tracking. Payment-provider integration, COD confirmation/OTP, reservation
+expiry processing, and the customer-facing checkout flow are not implemented.
+Provider-independent payment state transitions are defined and unit-tested, and
+the payment-attempt schema foundation exists; payment runtime services, signed
+webhooks, and provider adapters are not implemented.
 The current source is a root-level
 Next.js storefront (`app/`) plus a small NestJS API workspace (`apps/api/`) and
 a Prisma catalog workspace (`packages/database/`). The API implements public
@@ -28,17 +32,21 @@ flows, crawler surfaces, API error/not-found states, responsive styles,
 keyboard focus and reduced motion, and selected WCAG AA text-contrast ratios.
 These checks are not a browser-driven accessibility certification. The
 `notFound()` path emits `noindex`; with Next.js partial prerendering, an HTTP
-200 may be sent for a streamed not-found response. The Phase 3 guest-cart
-foundation is implemented: carts persist for 30 days, cart operations check
-current product/stock eligibility, and the UI surfaces price/stock changes.
-Carts do not reserve inventory. Checkout is disabled; shipping/tax quoting,
-orders, payments, and order lifecycle are not implemented.
+200 may be sent for a streamed not-found response. Guest carts persist for 30
+days, and cart operations check current product/stock eligibility and surface
+price/stock changes. Cart operations do not reserve inventory; order creation
+creates a time-limited reservation. The storefront checkout remains disabled,
+and payment confirmation, COD/OTP, reservation expiry processing, and the full
+order lifecycle remain unfinished.
 
-The catalog schema, three Prisma migrations, matching Supabase SQL migrations,
-API build/tests, schema validation, migration-contract tests, lint, and
-storefront production build have been verified. The migration set was applied
-to disposable local PostgreSQL 17 for validation. This does **not** establish
-that migrations were applied to a hosted Supabase project, that Storage buckets
+The original catalog migration set was applied to disposable local PostgreSQL
+17. The newer Phase 3 migrations have passing migration-contract tests, but
+their application to local PostgreSQL or hosted Supabase has not been verified.
+In the 2026-10-20 validation pass, API tests (29), migration-contract tests
+(12), storefront acceptance checks, API type-check, and lint passed after
+generating the Prisma client. `db:validate` was not run successfully because
+`DIRECT_URL` is not configured. This does **not** establish that the newer
+migrations were applied to a hosted Supabase project, that Storage buckets
 exist, or that production deployment/credentials are configured. Do not claim
 those integrations as live without fresh evidence.
 
@@ -572,6 +580,7 @@ GET /api/v1/products/search
 GET /api/v1/products/:idOrSlug
 GET /api/v1/categories
 GET /api/v1/brands
+GET /api/v1/vendors
 ```
 
 Swagger is available at `/api/docs`. This inventory is not the full API
@@ -1123,9 +1132,9 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 
 | Capability | Status | Verified evidence / limit |
 | --- | --- | --- |
-| Next.js storefront | Phase 2 complete; Phase 3 guest-cart slice | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, guest cart, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; checkout/orders and portals remain unimplemented. |
-| NestJS catalog and cart API | Implemented slices | `apps/api/src/`; public product list/search/detail, categories, brands, and guest-cart read/add/update/remove endpoints. |
-| Catalog/cart/order schema and migrations | Implemented foundation | `packages/database/prisma/` and matching `supabase/migrations/`; the order migration adds persistence only, not order behavior. Hosted Supabase application of these migrations is unverified. |
+| Next.js storefront | Phase 2 complete; Phase 3 cart slice | Server-rendered product listing/search/filter/pagination, product detail, category index/detail, guest cart, metadata/JSON-LD, `robots.txt`, `sitemap.xml`, and `/llms.txt`; checkout UI and customer portals remain unimplemented. |
+| NestJS catalog, cart, and order API | Implemented slices | `apps/api/src/`; public catalog and guest-cart routes, checkout quote, idempotent guest order creation, and token-protected guest order tracking. No payment-provider or COD confirmation route exists. |
+| Catalog/cart/order schema and migrations | Implemented foundation | `packages/database/prisma/` and matching `supabase/migrations/`; includes order/shipment persistence, checkout quote snapshots, order numbering, charge breakdowns, and hashed guest tracking tokens. Hosted Supabase application remains unverified. |
 | Public catalog visibility/search | Implemented slice | Catalog service enforces publication criteria; PostgreSQL full-text/trigram search migrations are present. |
 | Catalog RLS | Implemented for initial catalog tables | Default-deny policies are in the catalog migration set; no claim is made for future or absent tables. |
 | API input validation, errors, request IDs, CORS | Implemented | Configured in `apps/api/src/main.ts`; CORS is limited to explicitly configured origins and disabled when none are configured. |
@@ -1135,7 +1144,7 @@ Social-post media assets use the separate `SUPABASE_STORAGE_BUCKET_SOCIAL_ASSETS
 | Supabase hosted database application | Unverified / not applied in this work | Only disposable local PostgreSQL 17 validation was performed. |
 | Supabase Storage provisioning/uploads | Not implemented | API forms public media URLs; no bucket bootstrap or upload handler. |
 | Authentication, RBAC, entitlements, accounts | Not implemented | Targeted in the architecture/specifications only. |
-| Checkout, orders, payments, escrow, payouts | Persistence foundation only | Order, shipment, order-item, stock-reservation, status-history, and idempotency tables exist with constraints and RLS. No order API, quote, reservation mutation/expiry job, payment integration, escrow, or payout flow exists. |
+| Checkout, orders, payments, escrow, payouts | Phase 3 partial | API creates shipping/tax quotes, guest orders, vendor shipments, and temporary stock reservations; guest tracking is token-protected. Payment-attempt schema and state transitions are defined, but runtime payment services, signed webhooks, provider adapters, storefront checkout, COD/OTP, reservation expiry processing, escrow, and payouts are not implemented. Hosted migration application is unverified. |
 | Vendor/admin portals, CMS, reviews, loyalty, affiliates, returns | Not implemented | Target requirements only. |
 | Redis, outbox, n8n, social automation, visual search/pgvector | Not implemented | Target requirements only. |
 | CI/CD and production deployment | Not configured / unverified | No checked-in GitHub Actions workflows or API Dockerfile/deployment file. |

@@ -13,7 +13,7 @@ export type CatalogProduct = {
   condition: "NEW" | "USED" | "REFURBISHED";
   category: { name: string; slug: string };
   brand: { name: string; slug: string } | null;
-  vendor: { name: string };
+  vendor: { id: string; name: string };
   price: CatalogMoney | null;
   availability: "IN_STOCK" | "OUT_OF_STOCK";
   variants: Array<{
@@ -36,6 +36,11 @@ export type CatalogBrand = {
   id: string;
   name: string;
   slug: string;
+};
+
+export type CatalogVendor = {
+  id: string;
+  name: string;
 };
 
 export type ProductPage = {
@@ -197,7 +202,10 @@ function parseProduct(value: unknown): CatalogProduct {
             slug: requiredString(brand.slug, "brand slug"),
           }
         : null,
-    vendor: { name: requiredString(vendor.name, "vendor name") },
+    vendor: {
+      id: requiredString(vendor.id, "vendor ID"),
+      name: requiredString(vendor.name, "vendor name"),
+    },
     price: isRecord(price) ? parseMoney(price) : null,
     availability,
     variants: parsedVariants,
@@ -329,6 +337,22 @@ export const getBrands = cache(async (): Promise<CatalogBrand[]> => {
       id: requiredString(brand.id, "brand id"),
       name: requiredString(brand.name, "brand name"),
       slug: requiredString(brand.slug, "brand slug"),
+    };
+  });
+});
+
+export const getVendors = cache(async (): Promise<CatalogVendor[]> => {
+  const payload = await requestJson("vendors");
+  if (!isRecord(payload) || !Array.isArray(payload.data)) {
+    throw new CatalogApiError("Catalog response has invalid vendors.", 502);
+  }
+  return payload.data.map((vendor) => {
+    if (!isRecord(vendor)) {
+      throw new CatalogApiError("Catalog response has an invalid vendor.", 502);
+    }
+    return {
+      id: requiredString(vendor.id, "vendor ID"),
+      name: requiredString(vendor.name, "vendor name"),
     };
   });
 });

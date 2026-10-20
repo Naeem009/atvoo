@@ -20,6 +20,9 @@ const slugQuery = z
   .min(1)
   .max(140)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const vendorIdQuery = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 
 const catalogQuerySchema = z
   .object({
@@ -28,11 +31,12 @@ const catalogQuerySchema = z
     q: z.string().trim().min(2).max(100).optional(),
     category: slugQuery.optional(),
     brand: slugQuery.optional(),
+    vendorId: vendorIdQuery.optional(),
     minPrice: integerQuery(0, Number.MAX_SAFE_INTEGER),
     maxPrice: integerQuery(0, Number.MAX_SAFE_INTEGER),
     availability: z.enum(["all", "in-stock"]).default("all"),
     sort: z
-      .enum(["newest", "price-asc", "price-desc", "relevance"])
+      .enum(["newest", "popular", "price-asc", "price-desc", "relevance"])
       .default("newest"),
   })
   .strict()
@@ -55,6 +59,13 @@ const catalogQuerySchema = z
         message: "relevance sorting requires a search query",
       });
     }
+    if (value.q && value.sort === "popular") {
+      context.addIssue({
+        code: "custom",
+        path: ["sort"],
+        message: "Popular sorting is available for browse views, not search results.",
+      });
+    }
   });
 
 export type CatalogQuery = {
@@ -63,10 +74,11 @@ export type CatalogQuery = {
   q?: string;
   category?: string;
   brand?: string;
+  vendorId?: string;
   minPrice?: number;
   maxPrice?: number;
   availability: "all" | "in-stock";
-  sort: "newest" | "price-asc" | "price-desc" | "relevance";
+  sort: "newest" | "popular" | "price-asc" | "price-desc" | "relevance";
 };
 
 export function parseCatalogQuery(
